@@ -1,6 +1,6 @@
-mod token;
 mod literal;
 mod scanner;
+mod token;
 
 use std::env;
 
