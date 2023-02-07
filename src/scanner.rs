@@ -8,6 +8,7 @@ struct Scanner<'a> {
     source: &'a str,
     chars: CharIndices<'a>,
     current: (usize, char),
+    eof: (usize, char),
     line: u32,
     tokens: Vec<Token>,
 }
@@ -35,6 +36,7 @@ impl<'a> Scanner<'a> {
 
     fn new(source: &str) -> Scanner {
         let mut chars = source.char_indices();
+        let eof = (source.len(), '\0');
         let current = match chars.next() {
             None => (source.len(), '\0'),
             Some(x) => x
@@ -44,18 +46,15 @@ impl<'a> Scanner<'a> {
             source,
             chars,
             current, 
+            eof,
             line: 1,
             tokens: vec![],
         }
     }
 
-    fn eof(&self) -> (usize, char) {
-        (self.source.len(), '\0')
-    }
-
     fn peek_next(&self) -> (usize, char) {
         match self.chars.clone().next() {
-            None => self.eof(),
+            None => self.eof,
             Some(x) => x
         }
     }
@@ -63,23 +62,21 @@ impl<'a> Scanner<'a> {
     fn advance(&mut self) -> (usize, char) {
         let ret = self.current;
         self.current = match self.chars.next() {
-            None => self.eof(),
+            None => self.eof,
             Some(x) => x
         };
         ret
     }
 
     fn advance_while(&mut self, predicate: impl Fn(char) -> bool) -> usize {
-        let eof = self.eof();
-        while self.current != eof && predicate(self.current.1) {
+        while self.current != self.eof && predicate(self.current.1) {
             self.advance();
         }
         self.current.0
     }
 
     fn scan_tokens(&mut self) {
-        let eof = self.eof();
-        while self.current != eof {
+        while self.current != self.eof {
             self.scan_token();
         }
 
@@ -154,7 +151,7 @@ impl<'a> Scanner<'a> {
     fn number(&mut self, start: usize) {
         let mut end = self.advance_while(|c| c.is_ascii_digit());
 
-        if self.current.1 == '.' {
+        if self.current.1 == '.' && self.peek_next().1.is_ascii_digit() {
             self.advance();
             end = self.advance_while(|c| c.is_ascii_digit());
         }
@@ -268,6 +265,17 @@ mod test {
         assert_eq!(scanner.tokens[0].token_type, TokenType::Number);
         assert_eq!(scanner.tokens[0].literal, Some(Literal::Number(1234.0)));
         assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn integer_method() {
+        let mut scanner = Scanner::new("1234.call");
+        scanner.scan_tokens();
+
+        assert!(scanner.tokens.len() == 4);
+        assert_eq!(scanner.tokens[0].token_type, TokenType::Number);
+        assert_eq!(scanner.tokens[0].literal, Some(Literal::Number(1234.0)));
+        assert_eq!(scanner.tokens[3].token_type, TokenType::Eof);
     }
 
     #[test]
