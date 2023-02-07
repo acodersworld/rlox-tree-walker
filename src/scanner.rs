@@ -4,65 +4,10 @@ use phf::phf_map;
 use std::str::CharIndices;
 use std::vec::Vec;
 
-#[derive(Clone)]
-struct Cursor<'a> {
-    chars: CharIndices<'a>,
-    len: usize
-}
-
-impl<'a> Cursor<'a> {
-    const EOF: char = '\0';
-
-    fn new(chars: &str) -> Cursor {
-        Cursor {
-            chars: chars.char_indices(),
-            len: chars.len()
-        }
-    }
-
-    fn peek(&self) -> char {
-        match self.chars.clone().peekable().peek() {
-            None => Cursor::EOF,
-            Some(&(_, c)) => c
-        }
-    }
-
-    fn peek_next(&self) -> char {
-        match self.chars.clone().next() {
-            None => Cursor::EOF,
-            Some((_, c)) => c
-        }
-    }
-
-    fn index(&self) -> usize {
-        match self.chars.clone().next() {
-            None => self.len,
-            Some((i, _)) => i
-        }
-    }
-
-    fn advance(&mut self) -> char {
-        let c = match self.chars.next() {
-            None => Cursor::EOF,
-            Some((_, c)) => c
-        };
-        println!("ch: {}", c);
-        c
-    }
-
-    fn eat_while(&mut self, predicate: impl Fn(char) -> bool) {
-        while predicate(self.peek()) {
-            if self.advance() == Cursor::EOF {
-                return
-            }
-        }
-    }
-}
-
 struct Scanner<'a> {
     source: &'a str,
-    start_cursor: Cursor<'a>,
-    current_cursor: Cursor<'a>,
+    chars: CharIndices<'a>,
+    current: (usize, char),
     line: u32,
     tokens: Vec<Token>,
 }
@@ -89,18 +34,52 @@ impl<'a> Scanner<'a> {
     };
 
     fn new(source: &str) -> Scanner {
+        let mut chars = source.char_indices();
+        let current = match chars.next() {
+            None => (source.len(), '\0'),
+            Some(x) => x
+        };
+
         Scanner {
             source,
-            start_cursor: Cursor::new(source),
-            current_cursor: Cursor::new(source),
+            chars,
+            current, 
             line: 1,
             tokens: vec![],
         }
     }
 
+    fn eof(&self) -> (usize, char) {
+        (self.source.len(), '\0')
+    }
+
+    fn peek_next(&self) -> (usize, char) {
+        match self.chars.clone().next() {
+            None => self.eof(),
+            Some(x) => x
+        }
+    }
+
+    fn advance(&mut self) -> (usize, char) {
+        let ret = self.current;
+        self.current = match self.chars.next() {
+            None => self.eof(),
+            Some(x) => x
+        };
+        ret
+    }
+
+    fn advance_while(&mut self, predicate: impl Fn(char) -> bool) -> usize {
+        let eof = self.eof();
+        while self.current != eof && predicate(self.current.1) {
+            self.advance();
+        }
+        self.current.0
+    }
+
     fn scan_tokens(&mut self) {
-        while self.current_cursor.peek() != Cursor::EOF {
-            self.start_cursor = self.current_cursor.clone();
+        let eof = self.eof();
+        while self.current != eof {
             self.scan_token();
         }
 
@@ -109,23 +88,20 @@ impl<'a> Scanner<'a> {
     }
 
     fn scan_token(&mut self) {
-        let ch = self.current_cursor.advance();
-        println!("SCAN '{}'", ch);
-
-        match ch {
-            Cursor::EOF => return,
+        let ch = self.advance();
+        match ch.1 {
             '\n' => {
                 self.line += 1;
                 return;
             }
             ch if ch.is_whitespace() => return,
             '/' => {
-                if self.current_cursor.peek() == '/' {
-                    self.current_cursor.eat_while(|c| c != '\n');
+                if self.current.1 == '/' {
+                    self.advance_while(|c| c != '\n');
                 } else {
                     self.add_token(TokenType::Slash);
                 }
-            },
+            }
             '"' => self.string(),
             '(' => self.add_token(TokenType::LeftParen),
             ')' => self.add_token(TokenType::RightParen),
@@ -154,54 +130,47 @@ impl<'a> Scanner<'a> {
                 self.add_token(token);
             }
             _ => {
-                if ch.is_ascii_digit() {
-                    self.number()
-                } else if ch.is_ascii_alphabetic() {
-                    self.identifier()
+                if ch.1.is_ascii_digit() {
+                    self.number(ch.0)
+                } else if ch.1.is_ascii_alphabetic() {
+                    self.identifier(ch.0)
                 } else {
-                    // error
+                // error
                 }
             }
         }
     }
 
     fn add_token(&mut self, token_type: TokenType) {
-        let s = self.get_token_string();
         self.tokens
-            .push(Token::new(token_type, &s, None, self.line));
+            .push(Token::new(token_type, "", None, self.line));
     }
 
     fn add_literal_token(&mut self, token_type: TokenType, literal: Literal) {
-        let s = self.get_token_string();
         self.tokens
-            .push(Token::new(token_type, &s, Some(literal), self.line));
+            .push(Token::new(token_type, "", Some(literal), self.line));
     }
 
-    fn get_token_string(&self) -> &str {
-        &self.source[self.start_cursor.index()..self.current_cursor.index()]
-    }
+    fn number(&mut self, start: usize) {
+        let mut end = self.advance_while(|c| c.is_ascii_digit());
 
-    fn number(&mut self) {
-        self.current_cursor.eat_while(|c| c.is_ascii_digit());
-
-        println!("FT {}", self.current_cursor.peek());
-        if self.current_cursor.peek() == '.' {
-            self.current_cursor.advance();
-            self.current_cursor.eat_while(|c| c.is_ascii_digit());
+        if self.current.1 == '.' {
+            self.advance();
+            end = self.advance_while(|c| c.is_ascii_digit());
         }
 
-        let s = self.get_token_string();
+        println!("{} {}", start, end);
+        let s = &self.source[start..end];
         let value: f32 = s.parse().expect(&format!(
-            "Expected token string to be a valid number. String: {}",
-            s
+            "Expected token string to be a valid number. String: {}", s
         ));
         self.add_literal_token(TokenType::Number, Literal::Number(value));
     }
 
-    fn identifier(&mut self) {
-        self.current_cursor.eat_while(|c| c.is_alphanumeric());
+    fn identifier(&mut self, start: usize) {
+        let end = self.advance_while(|c| c.is_alphanumeric());
 
-        let s = self.get_token_string();
+        let s = &self.source[start..end];
         if let Some(&token_type) = Scanner::KEYWORDS.get(&s) {
             self.add_token(token_type);
         } else {
@@ -211,12 +180,13 @@ impl<'a> Scanner<'a> {
 
     fn string(&mut self) {
         println!("String");
-        self.current_cursor.eat_while(|c| c != '"');
+        let start = self.current.0;
+        let end = self.advance_while(|c| c != '"');
 
-        let s = &self.source[self.start_cursor.index() + 1..self.current_cursor.index()];
+        let s = &self.source[start..end];
         println!("SS {}", s);
         self.add_literal_token(TokenType::Str, Literal::Str(s.to_string()));
-        self.current_cursor.advance();
+        self.advance();
     }
 
     fn match_char(
@@ -225,11 +195,11 @@ impl<'a> Scanner<'a> {
         matched_token: TokenType,
         unmatched_token: TokenType,
     ) -> TokenType {
-        if self.current_cursor.peek() != ch {
+        if self.current.1 != ch {
             return unmatched_token;
         }
 
-        self.current_cursor.advance();
+        self.advance();
         return matched_token;
     }
 }
@@ -266,6 +236,7 @@ mod test {
         println!("{:?}", scanner.tokens);
         assert!(scanner.tokens.len() == 2);
         assert_eq!(scanner.tokens[0].token_type, TokenType::Str);
+        assert_eq!(scanner.tokens[0].literal, Some(Literal::Str("a string".to_owned())));
         assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
     }
 
@@ -295,6 +266,7 @@ mod test {
 
         assert!(scanner.tokens.len() == 2);
         assert_eq!(scanner.tokens[0].token_type, TokenType::Number);
+        assert_eq!(scanner.tokens[0].literal, Some(Literal::Number(1234.0)));
         assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
     }
 
@@ -305,6 +277,18 @@ mod test {
 
         assert!(scanner.tokens.len() == 2);
         assert_eq!(scanner.tokens[0].token_type, TokenType::Number);
+        assert_eq!(scanner.tokens[0].literal, Some(Literal::Number(1234.5678)));
+        assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn float_1() {
+        let mut scanner = Scanner::new("1.2345");
+        scanner.scan_tokens();
+
+        assert!(scanner.tokens.len() == 2);
+        assert_eq!(scanner.tokens[0].token_type, TokenType::Number);
+        assert_eq!(scanner.tokens[0].literal, Some(Literal::Number(1.2345)));
         assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
     }
 
@@ -314,6 +298,6 @@ mod test {
         scanner.scan_tokens();
 
         println!("{:?}", scanner.tokens);
-        assert!(false);
+        assert!(scanner.tokens.len() == 4);
     }
 }
