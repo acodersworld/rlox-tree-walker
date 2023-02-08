@@ -10,11 +10,11 @@ struct Scanner<'a> {
     eof: (usize, char),
     line: u32,
     tokens: Vec<Token>,
+    errors: Vec<String>,
 }
 
 impl<'a> Scanner<'a> {
     const KEYWORDS: phf::Map<&'static str, TokenType> = phf_map! {
-        "comma" => TokenType::Comma,
         "and" => TokenType::And,
         "class" => TokenType::Class,
         "else" => TokenType::Else,
@@ -33,7 +33,7 @@ impl<'a> Scanner<'a> {
         "while" => TokenType::While,
     };
 
-    fn new(source: &str) -> Scanner {
+    fn scan(source: &str) -> Result<Vec<Token>, Vec<String>> {
         let mut chars = source.char_indices();
         let eof = (source.len(), '\0');
         let current = match chars.next() {
@@ -41,14 +41,17 @@ impl<'a> Scanner<'a> {
             Some(x) => x,
         };
 
-        Scanner {
+        let scanner = Scanner {
             source,
             chars,
             current,
             eof,
             line: 1,
             tokens: vec![],
-        }
+            errors: vec![],
+        };
+
+        scanner.scan_tokens()
     }
 
     fn advance(&mut self) -> (usize, char) {
@@ -67,12 +70,18 @@ impl<'a> Scanner<'a> {
         self.current.0
     }
 
-    fn scan_tokens(&mut self) {
+    fn scan_tokens(mut self) -> Result<Vec<Token>, Vec<String>> {
         while self.current != self.eof {
             self.scan_token();
         }
 
         self.tokens.push(Token::new(TokenType::Eof, "", self.line));
+
+        if self.errors.is_empty() {
+            return Ok(self.tokens);
+        }
+
+        return Err(self.errors);
     }
 
     fn scan_token(&mut self) {
@@ -120,10 +129,11 @@ impl<'a> Scanner<'a> {
             _ => {
                 if ch.1.is_ascii_digit() {
                     self.number(ch.0)
-                } else if ch.1.is_ascii_alphabetic() {
+                } else if ch.1.is_ascii_alphabetic() || ch.1 == '_' {
                     self.identifier(ch.0)
                 } else {
-                    // error
+                    self.errors
+                        .push(format!("Invalid character {} at line {}", ch.1, self.line));
                 }
             }
         }
@@ -155,7 +165,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn identifier(&mut self, start: usize) {
-        let end = self.advance_while(|c| c.is_alphanumeric());
+        let end = self.advance_while(|c| c.is_alphanumeric() || c == '_');
 
         let s = &self.source[start..end];
         if let Some(token_type) = Scanner::KEYWORDS.get(&s) {
@@ -195,100 +205,219 @@ mod test {
 
     #[test]
     fn empty() {
-        let mut scanner = Scanner::new("");
-        scanner.scan_tokens();
+        let tokens = match Scanner::scan("") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 1);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Eof);
-        assert_eq!(scanner.tokens[0].line, 1);
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].token_type, TokenType::Eof);
+        assert_eq!(tokens[0].line, 1);
     }
 
     #[test]
     fn comment() {
-        let mut scanner = Scanner::new("// ==== ");
-        scanner.scan_tokens();
+        let tokens = match Scanner::scan("// ==== ") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 1);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Eof);
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn comment_new_line() {
+        let tokens = match Scanner::scan("// ==== \nNextLine") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
+
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(
+            tokens[0].token_type,
+            TokenType::Identifier("NextLine".to_owned())
+        );
+        assert_eq!(tokens[1].token_type, TokenType::Eof);
     }
 
     #[test]
     fn string() {
-        let mut scanner = Scanner::new("\"a string\"");
-        scanner.scan_tokens();
+        let tokens = match Scanner::scan("\"a string\"") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 2);
-        assert_eq!(
-            scanner.tokens[0].token_type,
-            TokenType::Str("a string".to_owned())
-        );
-        assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].token_type, TokenType::Str("a string".to_owned()));
+        assert_eq!(tokens[1].token_type, TokenType::Eof);
     }
 
     #[test]
     fn spaces() {
-        let mut scanner = Scanner::new(" \t\n\r");
-        scanner.scan_tokens();
+        let tokens = match Scanner::scan(" \t\n\r") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 1);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Eof);
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].token_type, TokenType::Eof);
     }
 
     #[test]
     fn newline() {
-        let mut scanner = Scanner::new("\n");
-        scanner.scan_tokens();
+        let tokens = match Scanner::scan("\n") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 1);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Eof);
-        assert_eq!(scanner.tokens[0].line, 2);
+        assert_eq!(tokens.len(), 1);
+        assert_eq!(tokens[0].token_type, TokenType::Eof);
+        assert_eq!(tokens[0].line, 2);
     }
 
     #[test]
     fn integer() {
-        let mut scanner = Scanner::new("1234");
-        scanner.scan_tokens();
+        let tokens = match Scanner::scan("1234") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 2);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Number(1234.0));
-        assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].token_type, TokenType::Number(1234.0));
+        assert_eq!(tokens[1].token_type, TokenType::Eof);
     }
 
     #[test]
     fn integer_method() {
-        let mut scanner = Scanner::new("1234.call");
-        scanner.scan_tokens();
+        let tokens = match Scanner::scan("1234.call") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 4);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Number(1234.0));
-        assert_eq!(scanner.tokens[3].token_type, TokenType::Eof);
+        assert_eq!(tokens.len(), 4);
+        assert_eq!(tokens[0].token_type, TokenType::Number(1234.0));
+        assert_eq!(tokens[3].token_type, TokenType::Eof);
     }
 
     #[test]
     fn float() {
-        let mut scanner = Scanner::new("1234.5678");
-        scanner.scan_tokens();
+        let tokens = match Scanner::scan("1234.5678") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 2);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Number(1234.5678));
-        assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].token_type, TokenType::Number(1234.5678));
+        assert_eq!(tokens[1].token_type, TokenType::Eof);
     }
 
     #[test]
     fn float_1() {
-        let mut scanner = Scanner::new("1.2345");
-        scanner.scan_tokens();
+        let tokens = match Scanner::scan("1.2345") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 2);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Number(1.2345));
-        assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(tokens[0].token_type, TokenType::Number(1.2345));
+        assert_eq!(tokens[1].token_type, TokenType::Eof);
     }
 
     #[test]
-    fn scan() {
-        let mut scanner = Scanner::new("<>===");
-        scanner.scan_tokens();
+    fn non_alphanumeric() {
+        let tokens = match Scanner::scan("(){},.-+*/!!====<<=>>=") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
 
-        assert!(scanner.tokens.len() == 4);
+        let expected_tokens = vec![
+            TokenType::LeftParen,
+            TokenType::RightParen,
+            TokenType::LeftBrace,
+            TokenType::RightBrace,
+            TokenType::Comma,
+            TokenType::Dot,
+            TokenType::Minus,
+            TokenType::Plus,
+            TokenType::Star,
+            TokenType::Slash,
+            TokenType::Bang,
+            TokenType::BangEqual,
+            TokenType::EqualEqual,
+            TokenType::Equal,
+            TokenType::Less,
+            TokenType::LessEqual,
+            TokenType::Greater,
+            TokenType::GreaterEqual,
+            TokenType::Eof,
+        ];
+
+        for (i, t) in expected_tokens.iter().enumerate() {
+            assert_eq!(tokens[i].token_type, *t);
+        }
+
+        assert_eq!(tokens.len(), expected_tokens.len());
+    }
+
+    #[test]
+    fn error() {
+        let errors = match Scanner::scan("^&%") {
+            Ok(_) => panic!("Expected scan error"),
+            Err(e) => e,
+        };
+
+        assert_eq!(errors.len(), 3);
+    }
+
+    #[test]
+    fn indentifier_with_underscore() {
+        let tokens = match Scanner::scan("indentifier_with_underscore") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
+
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(
+            tokens[0].token_type,
+            TokenType::Identifier("indentifier_with_underscore".to_owned())
+        );
+        assert_eq!(tokens[1].token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn indentifier_starts_with_underscore() {
+        let tokens = match Scanner::scan("_starts_with_underscore") {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
+
+        assert_eq!(tokens.len(), 2);
+        assert_eq!(
+            tokens[0].token_type,
+            TokenType::Identifier("_starts_with_underscore".to_owned())
+        );
+        assert_eq!(tokens[1].token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn keywords() {
+        let mut source = "".to_owned();
+        for (k, _) in &Scanner::KEYWORDS {
+            source.push_str(k);
+            source.push_str(" ");
+        }
+
+        let tokens = match Scanner::scan(&source) {
+            Ok(t) => t,
+            Err(e) => panic!("{:?}", e),
+        };
+
+        assert_eq!(tokens.len(), Scanner::KEYWORDS.len() + 1);
+        for (i, (_, v)) in Scanner::KEYWORDS.into_iter().enumerate() {
+            assert_eq!(tokens[i].token_type, *v);
+        }
+
+        assert_eq!(tokens.last().unwrap().token_type, TokenType::Eof);
     }
 }
