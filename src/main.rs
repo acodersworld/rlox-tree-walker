@@ -1,4 +1,3 @@
-mod literal;
 mod scanner;
 mod token;
 

@@ -1,7 +1,6 @@
-use crate::literal::Literal;
 use std::fmt;
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum TokenType {
     LeftParen,
     RightParen,
@@ -24,9 +23,9 @@ pub enum TokenType {
     Less,
     LessEqual,
 
-    Identifier,
-    Str,
-    Number,
+    Identifier(String),
+    Str(String),
+    Number(f32),
 
     And,
     Class,
@@ -52,16 +51,14 @@ pub enum TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
-    pub literal: Option<Literal>,
     pub line: u32,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: &str, literal: Option<Literal>, line: u32) -> Token {
+    pub fn new(token_type: TokenType, lexeme: &str, line: u32) -> Token {
         Token {
             token_type,
             lexeme: lexeme.to_string(),
-            literal,
             line,
         }
     }
@@ -69,9 +66,10 @@ impl Token {
 
 impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let literal = match &self.literal {
-            None => "".to_owned(),
-            Some(lit) => format!("{}", lit),
+        let literal: String = match &self.token_type {
+            TokenType::Str(s) => s.to_string(),
+            TokenType::Number(n) => n.to_string(),
+            _ => "".to_owned(),
         };
 
         write!(f, "{:?} {} {}", self.token_type, self.lexeme, literal)

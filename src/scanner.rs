@@ -1,4 +1,3 @@
-use crate::literal::Literal;
 use crate::token::{Token, TokenType};
 use phf::phf_map;
 use std::str::CharIndices;
@@ -39,23 +38,16 @@ impl<'a> Scanner<'a> {
         let eof = (source.len(), '\0');
         let current = match chars.next() {
             None => (source.len(), '\0'),
-            Some(x) => x
+            Some(x) => x,
         };
 
         Scanner {
             source,
             chars,
-            current, 
+            current,
             eof,
             line: 1,
             tokens: vec![],
-        }
-    }
-
-    fn peek_next(&self) -> (usize, char) {
-        match self.chars.clone().next() {
-            None => self.eof,
-            Some(x) => x
         }
     }
 
@@ -63,7 +55,7 @@ impl<'a> Scanner<'a> {
         let ret = self.current;
         self.current = match self.chars.next() {
             None => self.eof,
-            Some(x) => x
+            Some(x) => x,
         };
         ret
     }
@@ -80,8 +72,7 @@ impl<'a> Scanner<'a> {
             self.scan_token();
         }
 
-        self.tokens
-            .push(Token::new(TokenType::Eof, "", None, self.line));
+        self.tokens.push(Token::new(TokenType::Eof, "", self.line));
     }
 
     fn scan_token(&mut self) {
@@ -132,57 +123,54 @@ impl<'a> Scanner<'a> {
                 } else if ch.1.is_ascii_alphabetic() {
                     self.identifier(ch.0)
                 } else {
-                // error
+                    // error
                 }
             }
         }
     }
 
     fn add_token(&mut self, token_type: TokenType) {
-        self.tokens
-            .push(Token::new(token_type, "", None, self.line));
-    }
-
-    fn add_literal_token(&mut self, token_type: TokenType, literal: Literal) {
-        self.tokens
-            .push(Token::new(token_type, "", Some(literal), self.line));
+        self.tokens.push(Token::new(token_type, "", self.line));
     }
 
     fn number(&mut self, start: usize) {
         let mut end = self.advance_while(|c| c.is_ascii_digit());
 
-        if self.current.1 == '.' && self.peek_next().1.is_ascii_digit() {
+        let is_next_digit = || match self.chars.clone().next() {
+            None => false,
+            Some(x) => x.1.is_ascii_digit(),
+        };
+
+        if self.current.1 == '.' && is_next_digit() {
             self.advance();
             end = self.advance_while(|c| c.is_ascii_digit());
         }
 
-        println!("{} {}", start, end);
         let s = &self.source[start..end];
         let value: f32 = s.parse().expect(&format!(
-            "Expected token string to be a valid number. String: {}", s
+            "Expected token string to be a valid number. String: {}",
+            s
         ));
-        self.add_literal_token(TokenType::Number, Literal::Number(value));
+        self.add_token(TokenType::Number(value));
     }
 
     fn identifier(&mut self, start: usize) {
         let end = self.advance_while(|c| c.is_alphanumeric());
 
         let s = &self.source[start..end];
-        if let Some(&token_type) = Scanner::KEYWORDS.get(&s) {
-            self.add_token(token_type);
+        if let Some(token_type) = Scanner::KEYWORDS.get(&s) {
+            self.add_token(token_type.clone());
         } else {
-            self.add_token(TokenType::Identifier);
+            self.add_token(TokenType::Identifier(s.to_string()));
         }
     }
 
     fn string(&mut self) {
-        println!("String");
         let start = self.current.0;
         let end = self.advance_while(|c| c != '"');
 
         let s = &self.source[start..end];
-        println!("SS {}", s);
-        self.add_literal_token(TokenType::Str, Literal::Str(s.to_string()));
+        self.add_token(TokenType::Str(s.to_string()));
         self.advance();
     }
 
@@ -220,7 +208,6 @@ mod test {
         let mut scanner = Scanner::new("// ==== ");
         scanner.scan_tokens();
 
-        println!("{:?}", scanner.tokens);
         assert!(scanner.tokens.len() == 1);
         assert_eq!(scanner.tokens[0].token_type, TokenType::Eof);
     }
@@ -230,10 +217,11 @@ mod test {
         let mut scanner = Scanner::new("\"a string\"");
         scanner.scan_tokens();
 
-        println!("{:?}", scanner.tokens);
         assert!(scanner.tokens.len() == 2);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Str);
-        assert_eq!(scanner.tokens[0].literal, Some(Literal::Str("a string".to_owned())));
+        assert_eq!(
+            scanner.tokens[0].token_type,
+            TokenType::Str("a string".to_owned())
+        );
         assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
     }
 
@@ -262,8 +250,7 @@ mod test {
         scanner.scan_tokens();
 
         assert!(scanner.tokens.len() == 2);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Number);
-        assert_eq!(scanner.tokens[0].literal, Some(Literal::Number(1234.0)));
+        assert_eq!(scanner.tokens[0].token_type, TokenType::Number(1234.0));
         assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
     }
 
@@ -273,8 +260,7 @@ mod test {
         scanner.scan_tokens();
 
         assert!(scanner.tokens.len() == 4);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Number);
-        assert_eq!(scanner.tokens[0].literal, Some(Literal::Number(1234.0)));
+        assert_eq!(scanner.tokens[0].token_type, TokenType::Number(1234.0));
         assert_eq!(scanner.tokens[3].token_type, TokenType::Eof);
     }
 
@@ -284,8 +270,7 @@ mod test {
         scanner.scan_tokens();
 
         assert!(scanner.tokens.len() == 2);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Number);
-        assert_eq!(scanner.tokens[0].literal, Some(Literal::Number(1234.5678)));
+        assert_eq!(scanner.tokens[0].token_type, TokenType::Number(1234.5678));
         assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
     }
 
@@ -295,8 +280,7 @@ mod test {
         scanner.scan_tokens();
 
         assert!(scanner.tokens.len() == 2);
-        assert_eq!(scanner.tokens[0].token_type, TokenType::Number);
-        assert_eq!(scanner.tokens[0].literal, Some(Literal::Number(1.2345)));
+        assert_eq!(scanner.tokens[0].token_type, TokenType::Number(1.2345));
         assert_eq!(scanner.tokens[1].token_type, TokenType::Eof);
     }
 
@@ -305,7 +289,6 @@ mod test {
         let mut scanner = Scanner::new("<>===");
         scanner.scan_tokens();
 
-        println!("{:?}", scanner.tokens);
         assert!(scanner.tokens.len() == 4);
     }
 }
