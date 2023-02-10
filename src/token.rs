@@ -47,20 +47,66 @@ pub enum TokenType {
     Eof,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Token {
     pub token_type: TokenType,
-    pub lexeme: String,
     pub line: u32,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: &str, line: u32) -> Token {
+    pub fn new(token_type: TokenType, line: u32) -> Token {
         Token {
             token_type,
-            lexeme: lexeme.to_string(),
             line,
         }
+    }
+
+    pub fn to_string(&self) -> String {
+        match &self.token_type {
+            TokenType::LeftParen => "(",
+            TokenType::RightParen => ")",
+            TokenType::LeftBrace => "{",
+            TokenType::RightBrace => "}",
+            TokenType::Comma => ",",
+            TokenType::Dot => ".",
+            TokenType::Minus => "-",
+            TokenType::Plus => "+",
+            TokenType::SemiColon => ";",
+            TokenType::Slash => "/",
+            TokenType::Star => "*",
+
+            TokenType::Bang => "!",
+            TokenType::BangEqual => "!=",
+            TokenType::Equal => "=",
+            TokenType::EqualEqual => "==",
+            TokenType::Greater => ">",
+            TokenType::GreaterEqual => ">=",
+            TokenType::Less => "<",
+            TokenType::LessEqual => "<=",
+
+            TokenType::Identifier(i) => return i.clone(),
+            TokenType::Str(s) => return s.clone(),
+            TokenType::Number(n) => return n.to_string(),
+
+            TokenType::And => "and",
+            TokenType::Class => "class",
+            TokenType::Else => "else",
+            TokenType::False => "false",
+            TokenType::Fun => "fun",
+            TokenType::For => "for",
+            TokenType::If => "if",
+            TokenType::Nil => "nil",
+            TokenType::Or => "or",
+            TokenType::Print => "print",
+            TokenType::Return => "return",
+            TokenType::Super => "super",
+            TokenType::This => "this",
+            TokenType::True => "true",
+            TokenType::Var => "var",
+            TokenType::While => "while",
+
+            TokenType::Eof => "EOF"
+        }.to_string()
     }
 }
 
@@ -72,6 +118,6 @@ impl fmt::Display for Token {
             _ => "".to_owned(),
         };
 
-        write!(f, "{:?} {} {}", self.token_type, self.lexeme, literal)
+        write!(f, "{:?} {}", self.token_type, literal)
     }
 }

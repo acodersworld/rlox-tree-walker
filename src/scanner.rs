@@ -3,6 +3,27 @@ use phf::phf_map;
 use std::str::CharIndices;
 use std::vec::Vec;
 
+pub fn scan(source: &str) -> Result<Vec<Token>, Vec<String>> {
+    let mut chars = source.char_indices();
+    let eof = (source.len(), '\0');
+    let current = match chars.next() {
+        None => (source.len(), '\0'),
+        Some(x) => x,
+    };
+
+    let scanner = Scanner {
+        source,
+        chars,
+        current,
+        eof,
+        line: 1,
+        tokens: vec![],
+        errors: vec![],
+    };
+
+    scanner.scan_tokens()
+}
+
 struct Scanner<'a> {
     source: &'a str,
     chars: CharIndices<'a>,
@@ -33,27 +54,6 @@ impl<'a> Scanner<'a> {
         "while" => TokenType::While,
     };
 
-    fn scan(source: &str) -> Result<Vec<Token>, Vec<String>> {
-        let mut chars = source.char_indices();
-        let eof = (source.len(), '\0');
-        let current = match chars.next() {
-            None => (source.len(), '\0'),
-            Some(x) => x,
-        };
-
-        let scanner = Scanner {
-            source,
-            chars,
-            current,
-            eof,
-            line: 1,
-            tokens: vec![],
-            errors: vec![],
-        };
-
-        scanner.scan_tokens()
-    }
-
     fn advance(&mut self) -> (usize, char) {
         let ret = self.current;
         self.current = match self.chars.next() {
@@ -75,7 +75,7 @@ impl<'a> Scanner<'a> {
             self.scan_token();
         }
 
-        self.tokens.push(Token::new(TokenType::Eof, "", self.line));
+        self.tokens.push(Token::new(TokenType::Eof, self.line));
 
         if self.errors.is_empty() {
             return Ok(self.tokens);
@@ -140,7 +140,7 @@ impl<'a> Scanner<'a> {
     }
 
     fn add_token(&mut self, token_type: TokenType) {
-        self.tokens.push(Token::new(token_type, "", self.line));
+        self.tokens.push(Token::new(token_type, self.line));
     }
 
     fn number(&mut self, start: usize) {
@@ -205,7 +205,7 @@ mod test {
 
     #[test]
     fn empty() {
-        let tokens = match Scanner::scan("") {
+        let tokens = match scan("") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -217,7 +217,7 @@ mod test {
 
     #[test]
     fn comment() {
-        let tokens = match Scanner::scan("// ==== ") {
+        let tokens = match scan("// ==== ") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -228,7 +228,7 @@ mod test {
 
     #[test]
     fn comment_new_line() {
-        let tokens = match Scanner::scan("// ==== \nNextLine") {
+        let tokens = match scan("// ==== \nNextLine") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -243,7 +243,7 @@ mod test {
 
     #[test]
     fn string() {
-        let tokens = match Scanner::scan("\"a string\"") {
+        let tokens = match scan("\"a string\"") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -255,7 +255,7 @@ mod test {
 
     #[test]
     fn spaces() {
-        let tokens = match Scanner::scan(" \t\n\r") {
+        let tokens = match scan(" \t\n\r") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -266,7 +266,7 @@ mod test {
 
     #[test]
     fn newline() {
-        let tokens = match Scanner::scan("\n") {
+        let tokens = match scan("\n") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -278,7 +278,7 @@ mod test {
 
     #[test]
     fn integer() {
-        let tokens = match Scanner::scan("1234") {
+        let tokens = match scan("1234") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -290,7 +290,7 @@ mod test {
 
     #[test]
     fn integer_method() {
-        let tokens = match Scanner::scan("1234.call") {
+        let tokens = match scan("1234.call") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -302,7 +302,7 @@ mod test {
 
     #[test]
     fn float() {
-        let tokens = match Scanner::scan("1234.5678") {
+        let tokens = match scan("1234.5678") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -314,7 +314,7 @@ mod test {
 
     #[test]
     fn float_1() {
-        let tokens = match Scanner::scan("1.2345") {
+        let tokens = match scan("1.2345") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -326,7 +326,7 @@ mod test {
 
     #[test]
     fn non_alphanumeric() {
-        let tokens = match Scanner::scan("(){},.-+*/!!====<<=>>=") {
+        let tokens = match scan("(){},.-+*/!!====<<=>>=") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -362,7 +362,7 @@ mod test {
 
     #[test]
     fn error() {
-        let errors = match Scanner::scan("^&%") {
+        let errors = match scan("^&%") {
             Ok(_) => panic!("Expected scan error"),
             Err(e) => e,
         };
@@ -372,7 +372,7 @@ mod test {
 
     #[test]
     fn indentifier_with_underscore() {
-        let tokens = match Scanner::scan("indentifier_with_underscore") {
+        let tokens = match scan("indentifier_with_underscore") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -387,7 +387,7 @@ mod test {
 
     #[test]
     fn indentifier_starts_with_underscore() {
-        let tokens = match Scanner::scan("_starts_with_underscore") {
+        let tokens = match scan("_starts_with_underscore") {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
@@ -408,7 +408,7 @@ mod test {
             source.push_str(" ");
         }
 
-        let tokens = match Scanner::scan(&source) {
+        let tokens = match scan(&source) {
             Ok(t) => t,
             Err(e) => panic!("{:?}", e),
         };
