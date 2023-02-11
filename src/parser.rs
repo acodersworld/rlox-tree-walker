@@ -9,16 +9,17 @@ struct Parser<'a> {
 }
 
 type ExprResult = Result<expr::Expr, std::vec::Vec<String>>;
-pub fn parse(tokens: &Vec<Token>) -> ExprResult {
+pub fn parse(tokens: &[Token]) -> ExprResult {
     let mut parser = Parser {
         iter: tokens.iter().peekable()
     };
 
-    while parser.iter.peek().is_some() {
-        return parser.expression();
+    let expr = parser.expression();
+    if parser.iter.peek().is_some() {
+        return Err(vec!["Expected EOF".to_string()]);
     }
 
-    unreachable!()
+    return expr;
 }
 
 impl<'a> Parser<'a> {
@@ -80,13 +81,13 @@ impl<'a> Parser<'a> {
     fn primary(&mut self) -> ExprResult {
         if let Some(t) = self.iter.next() {
             match &t.token_type {
-                TokenType::True => return Ok(expr::Expr::Bool(expr::LiteralBool{value: true})),
-                TokenType::False => return Ok(expr::Expr::Bool(expr::LiteralBool{value: false})),
+                TokenType::True => return Ok(expr::Expr::Bool(true)),
+                TokenType::False => return Ok(expr::Expr::Bool(false)),
 
                 TokenType::Nil => return Ok(expr::Expr::Nil),
 
-                TokenType::Number(value) => return Ok(expr::Expr::Number(expr::LiteralNumber{value: *value})),
-                TokenType::Str(value) => return Ok(expr::Expr::Str(expr::LiteralStr{value: value.clone()})),
+                TokenType::Number(value) => return Ok(expr::Expr::Number(*value)),
+                TokenType::Str(value) => return Ok(expr::Expr::Str(value.clone())),
 
                 _ => return Err(vec![format!("Expected primary expression, found {}", t.to_string())])
             };
@@ -96,3 +97,119 @@ impl<'a> Parser<'a> {
     }
 }
 
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn primary() {
+       assert_eq!(parse(&vec![Token::new(TokenType::True, 1)]).unwrap(), expr::Expr::Bool(true));
+       assert_eq!(parse(&vec![Token::new(TokenType::False, 1)]).unwrap(), expr::Expr::Bool(false));
+       assert_eq!(parse(&vec![Token::new(TokenType::Nil, 1)]).unwrap(), expr::Expr::Nil);
+       assert_eq!(parse(&vec![Token::new(TokenType::Number(3.142), 1)]).unwrap(), expr::Expr::Number(3.142));
+       assert_eq!(parse(&vec![Token::new(TokenType::Str("Hello World".to_owned()), 1)]).unwrap(), expr::Expr::Str("Hello World".to_owned()));
+    }
+
+    #[test]
+    fn term() {
+       assert_eq!(
+           parse(
+               &vec![
+                   Token::new(TokenType::Number(4.0), 1),
+                   Token::new(TokenType::Plus, 1),
+                   Token::new(TokenType::Number(8.5), 1)
+               ]).unwrap(), 
+           expr::Expr::Binary(expr::Binary{
+               left: Box::new(expr::Expr::Number(4.0)),
+               operator: Token::new(TokenType::Plus, 1),
+               right: Box::new(expr::Expr::Number(8.5))
+           }));
+
+       assert_eq!(
+           parse(
+               &vec![
+                   Token::new(TokenType::Number(4.0), 1),
+                   Token::new(TokenType::Minus, 1),
+                   Token::new(TokenType::Number(8.5), 1)
+               ]).unwrap(), 
+           expr::Expr::Binary(expr::Binary{
+               left: Box::new(expr::Expr::Number(4.0)),
+               operator: Token::new(TokenType::Minus, 1),
+               right: Box::new(expr::Expr::Number(8.5))
+           }));
+    }
+
+    #[test]
+    fn factor() {
+       assert_eq!(
+           parse(
+               &vec![
+                   Token::new(TokenType::Number(4.0), 1),
+                   Token::new(TokenType::Slash, 1),
+                   Token::new(TokenType::Number(8.5), 1)
+               ]).unwrap(), 
+           expr::Expr::Binary(expr::Binary{
+               left: Box::new(expr::Expr::Number(4.0)),
+               operator: Token::new(TokenType::Slash, 1),
+               right: Box::new(expr::Expr::Number(8.5))
+           }));
+
+       assert_eq!(
+           parse(
+               &vec![
+                   Token::new(TokenType::Number(4.0), 1),
+                   Token::new(TokenType::Star, 1),
+                   Token::new(TokenType::Number(8.5), 1)
+               ]).unwrap(), 
+           expr::Expr::Binary(expr::Binary{
+               left: Box::new(expr::Expr::Number(4.0)),
+               operator: Token::new(TokenType::Star, 1),
+               right: Box::new(expr::Expr::Number(8.5))
+           }));
+    }
+
+    #[test]
+    fn term_factor() {
+        assert_eq!(
+           parse(
+               &vec![
+                   Token::new(TokenType::Number(1.0), 1),
+                   Token::new(TokenType::Plus, 1),
+                   Token::new(TokenType::Number(2.0), 1),
+                   Token::new(TokenType::Slash, 1),
+                   Token::new(TokenType::Number(3.0), 1),
+                   Token::new(TokenType::Minus, 1),
+                   Token::new(TokenType::Number(4.0), 1),
+                   Token::new(TokenType::Star, 1),
+                   Token::new(TokenType::Number(5.0), 1)
+               ]).unwrap(), 
+
+           expr::Expr::Binary(expr::Binary{
+               left: 
+                    Box::new(expr::Expr::Binary(expr::Binary{
+                        left: Box::new(expr::Expr::Number(1.0)),
+                        operator: Token::new(TokenType::Plus, 1),
+                        right: Box::new(expr::Expr::Binary(expr::Binary{
+                           left: Box::new(expr::Expr::Number(2.0)),
+                           operator: Token::new(TokenType::Slash, 1),
+                           right: Box::new(expr::Expr::Number(3.0))
+                       }))
+                    })),
+               operator: Token::new(TokenType::Minus, 1),
+               right: 
+                    Box::new(expr::Expr::Binary(expr::Binary{
+                        left: Box::new(expr::Expr::Number(4.0)),
+                        operator: Token::new(TokenType::Star, 1),
+                        right: Box::new(expr::Expr::Number(5.0))
+                   }))
+            })
+        );
+    }
+
+    #[test]
+    fn error_cases() {
+           assert!(parse(&vec![Token::new(TokenType::Star, 1)]).is_err());
+           assert!(parse(&vec![Token::new(TokenType::Number(8.0), 1), Token::new(TokenType::Star, 1)]).is_err());
+           assert!(parse(&vec![Token::new(TokenType::Number(8.0), 1), Token::new(TokenType::Number(1.0), 1)]).is_err());
+    }
+}

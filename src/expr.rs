@@ -1,37 +1,25 @@
 use crate::token;
 
-#[derive(Debug)]
-pub struct Literal<T> {
-    pub value: T
-}
-
-pub type LiteralBool = Literal<bool>;
-pub type LiteralStr = Literal<String>;
-pub type LiteralNumber = Literal<f32>;
-
-#[derive(Debug)]
-pub struct Nil {}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Binary {
     pub left: Box<Expr>,
     pub operator: token::Token,
     pub right: Box<Expr>
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Expr {
-    Bool(LiteralBool),
-    Str(LiteralStr),
-    Number(LiteralNumber),
+    Bool(bool),
+    Str(String),
+    Number(f32),
     Binary(Binary),
     Nil
 }
 
 pub trait ExprVisitor<T> {
-    fn visit_literal_bool(&self, literal_bool: &LiteralBool) -> T;
-    fn visit_literal_str(&self, literal_str: &LiteralStr) -> T;
-    fn visit_literal_number(&self, literal_number: &LiteralNumber) -> T;
+    fn visit_literal_bool(&self, literal_bool: &bool) -> T;
+    fn visit_literal_str(&self, literal_str: &str) -> T;
+    fn visit_literal_number(&self, literal_number: &f32) -> T;
     fn visit_binary(&self, binary: &Binary) -> T;
 	fn visit_nil(&self) -> T;
 }
