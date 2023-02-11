@@ -3,6 +3,8 @@ mod token;
 mod expr;
 mod parser;
 mod lox;
+mod interpreter;
+mod eval_value;
 
 use std::env;
 

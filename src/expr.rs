@@ -25,7 +25,7 @@ pub trait ExprVisitor<T> {
 }
 
 impl Expr {
-	fn accept<T>(&self, visitor: &impl ExprVisitor<T>) -> T {
+	pub fn accept<T>(&self, visitor: &impl ExprVisitor<T>) -> T {
 		match self {
 			Expr::Bool(b) => visitor.visit_literal_bool(b),
 			Expr::Str(s) => visitor.visit_literal_str(s),

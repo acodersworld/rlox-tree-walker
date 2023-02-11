@@ -156,6 +156,10 @@ impl<'a> Scanner<'a> {
             end = self.advance_while(|c| c.is_ascii_digit());
         }
 
+        if self.current.1.is_ascii_alphabetic() {
+            self.errors.push(format!("Unexpected character '{}' after number at line {}", self.current.1, self.line));
+        }
+
         let s = &self.source[start..end];
         let value: f32 = s.parse().expect(&format!(
             "Expected token string to be a valid number. String: {}",
@@ -322,6 +326,14 @@ mod test {
         assert_eq!(tokens.len(), 2);
         assert_eq!(tokens[0].token_type, TokenType::Number(1.2345));
         assert_eq!(tokens[1].token_type, TokenType::Eof);
+    }
+
+    #[test]
+    fn error_if_alpha_after_number() {
+        match scan("123ab") {
+            Ok(_) => panic!("Should not scanner successfully"),
+            Err(_) => {}
+        };
     }
 
     #[test]

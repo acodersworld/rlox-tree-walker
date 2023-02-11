@@ -1,5 +1,6 @@
 use crate::scanner;
 use crate::parser;
+use crate::interpreter::Interpreter;
 use std::io;
 
 pub fn lox_main(args: &[String]) {
@@ -14,11 +15,11 @@ pub fn lox_main(args: &[String]) {
     }
 }
 
-fn run(source: &str) -> Result<(), std::vec::Vec<String>> {
+fn run(interpreter: &mut Interpreter, source: &str) -> Result<(), std::vec::Vec<String>> {
     let tokens = scanner::scan(source)?;
     let expr = parser::parse(&tokens)?;
 
-    println!("{:?}", expr);
+    println!("{:#?}", interpreter.evaluate_expr(&expr));
     Ok(())
 }
 
@@ -28,6 +29,8 @@ fn run_file(filename: &str) {
 
 fn run_prompt() {
 
+    let mut interpreter = Interpreter::new();
+
     let mut line = String::new();
     loop {
         eprint!(":> ");
@@ -35,7 +38,7 @@ fn run_prompt() {
             return;
         }
 
-        if let Err(e) = run(&line) {
+        if let Err(e) = run(&mut interpreter, &line) {
             eprintln!("Error: {}", e[0]);
         }
 

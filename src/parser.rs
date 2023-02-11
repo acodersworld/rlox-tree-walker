@@ -1,4 +1,3 @@
-use std::vec::Vec;
 use std::slice::Iter;
 use std::iter::Peekable;
 use crate::token::{Token, TokenType};
@@ -15,8 +14,11 @@ pub fn parse(tokens: &[Token]) -> ExprResult {
     };
 
     let expr = parser.expression();
-    if parser.iter.peek().is_some() {
-        return Err(vec!["Expected EOF".to_string()]);
+
+    if let Some(token) = parser.iter.next() {
+        if token.token_type != TokenType::Eof {
+            return Err(vec![format!("Expected EOF, found {:?}", token)]);
+        }
     }
 
     return expr;
