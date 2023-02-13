@@ -77,6 +77,23 @@ impl expr::ExprVisitor<EvalResult> for Interpreter {
                 Ok(EvalValue::Bool(l != r))
             },
 
+            TokenType::And => {
+                let left = self.evaluate_expr(&binary.left)?;
+                if !self.is_truthy(&left) {
+                    return Ok(left);
+                }
+
+                return Ok(self.evaluate_expr(&binary.right)?);
+            },
+            TokenType::Or => {
+                let left = self.evaluate_expr(&binary.left)?;
+                if self.is_truthy(&left) {
+                    return Ok(left);
+                }
+
+                return Ok(self.evaluate_expr(&binary.right)?);
+            },
+
             TokenType::Minus => {
                 let (l, r) = get_numbers()?;
                 Ok(EvalValue::Number(l - r))

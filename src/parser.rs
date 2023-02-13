@@ -44,7 +44,31 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> ExprResult {
-        return self.equality();
+        return self.logical_or();
+    }
+
+    fn logical_or(&mut self) -> ExprResult {
+        let expr = self.logical_and()?;
+
+        if let Some(operator) = self.match_tokens(&[TokenType::Or]) {
+            let left = Box::new(expr);
+            let right = Box::new(self.comparison()?);
+            return Ok(expr::Expr::Binary(expr::Binary{left, operator, right}))
+        }
+
+        Ok(expr)
+    }
+
+    fn logical_and(&mut self) -> ExprResult {
+        let expr = self.equality()?;
+
+        if let Some(operator) = self.match_tokens(&[TokenType::And]) {
+            let left = Box::new(expr);
+            let right = Box::new(self.comparison()?);
+            return Ok(expr::Expr::Binary(expr::Binary{left, operator, right}))
+        }
+
+        Ok(expr)
     }
 
     fn equality(&mut self) -> ExprResult {
@@ -500,6 +524,40 @@ mod test {
             expr::Expr::Binary(expr::Binary {
                 left: Box::new(expr::Expr::Number(2.0)),
                 operator: Token::new(TokenType::BangEqual, 1),
+                right: Box::new(expr::Expr::Number(3.0))
+            })
+        );
+    }
+
+    #[test]
+    fn logical_or() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Number(3.0), 1),
+                Token::new(TokenType::Or, 1),
+                Token::new(TokenType::Number(3.0), 1),
+            ])
+            .unwrap(),
+            expr::Expr::Binary(expr::Binary {
+                left: Box::new(expr::Expr::Number(3.0)),
+                operator: Token::new(TokenType::Or, 1),
+                right: Box::new(expr::Expr::Number(3.0))
+            })
+        );
+    }
+
+    #[test]
+    fn logical_and() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Number(2.0), 1),
+                Token::new(TokenType::And, 1),
+                Token::new(TokenType::Number(3.0), 1),
+            ])
+            .unwrap(),
+            expr::Expr::Binary(expr::Binary {
+                left: Box::new(expr::Expr::Number(2.0)),
+                operator: Token::new(TokenType::And, 1),
                 right: Box::new(expr::Expr::Number(3.0))
             })
         );
