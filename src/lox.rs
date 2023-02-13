@@ -1,16 +1,14 @@
-use crate::scanner;
-use crate::parser;
 use crate::interpreter::Interpreter;
+use crate::parser;
+use crate::scanner;
 use std::io;
 
 pub fn lox_main(args: &[String]) {
     if args.len() > 0 {
         println!("Usage: lox [script]");
-    }
-    else if args.len() == 1 {
+    } else if args.len() == 1 {
         run_file(&args[0]);
-    }
-    else {
+    } else {
         run_prompt();
     }
 }
@@ -24,11 +22,10 @@ fn run(interpreter: &mut Interpreter, source: &str) -> Result<(), std::vec::Vec<
 }
 
 fn run_file(filename: &str) {
-//    run();
+    //    run();
 }
 
 fn run_prompt() {
-
     let mut interpreter = Interpreter::new();
 
     let mut line = String::new();
@@ -45,4 +42,3 @@ fn run_prompt() {
         line.clear();
     }
 }
-

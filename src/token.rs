@@ -55,10 +55,7 @@ pub struct Token {
 
 impl Token {
     pub fn new(token_type: TokenType, line: u32) -> Token {
-        Token {
-            token_type,
-            line,
-        }
+        Token { token_type, line }
     }
 
     pub fn to_string(&self) -> String {
@@ -105,8 +102,9 @@ impl Token {
             TokenType::Var => "var",
             TokenType::While => "while",
 
-            TokenType::Eof => "EOF"
-        }.to_string()
+            TokenType::Eof => "EOF",
+        }
+        .to_string()
     }
 }
 

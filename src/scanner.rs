@@ -157,7 +157,10 @@ impl<'a> Scanner<'a> {
         }
 
         if self.current.1.is_ascii_alphabetic() {
-            self.errors.push(format!("Unexpected character '{}' after number at line {}", self.current.1, self.line));
+            self.errors.push(format!(
+                "Unexpected character '{}' after number at line {}",
+                self.current.1, self.line
+            ));
         }
 
         let s = &self.source[start..end];

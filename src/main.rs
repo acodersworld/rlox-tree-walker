@@ -1,10 +1,10 @@
+mod eval_value;
+mod expr;
+mod interpreter;
+mod lox;
+mod parser;
 mod scanner;
 mod token;
-mod expr;
-mod parser;
-mod lox;
-mod interpreter;
-mod eval_value;
 
 use std::env;
 
