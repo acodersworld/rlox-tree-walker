@@ -44,7 +44,41 @@ impl<'a> Parser<'a> {
     }
 
     fn expression(&mut self) -> ExprResult {
-        return self.term();
+        return self.equality();
+    }
+
+    fn equality(&mut self) -> ExprResult {
+        let expr = self.comparison()?;
+
+        if let Some(operator) = self.match_tokens(&[TokenType::EqualEqual, TokenType::BangEqual]) {
+            match operator.token_type {
+                TokenType::EqualEqual | TokenType::BangEqual => {
+                    let left = Box::new(expr);
+                    let right = Box::new(self.comparison()?);
+                    return Ok(expr::Expr::Binary(expr::Binary{left, operator, right}))
+                },
+                _ => panic!("Unexpected token parsing comparison: {:?}", operator)
+            }
+        }
+
+        Ok(expr)
+    }
+
+    fn comparison(&mut self) -> ExprResult {
+        let expr = self.term()?;
+
+        if let Some(operator) = self.match_tokens(&[TokenType::Less, TokenType::LessEqual, TokenType::Greater, TokenType::GreaterEqual]) {
+            match operator.token_type {
+                TokenType::Less | TokenType::LessEqual | TokenType::Greater | TokenType::GreaterEqual => {
+                    let left = Box::new(expr);
+                    let right = Box::new(self.term()?);
+                    return Ok(expr::Expr::Binary(expr::Binary{left, operator, right}))
+                },
+                _ => panic!("Unexpected token parsing comparison: {:?}", operator)
+            }
+        }
+
+        Ok(expr)
     }
 
     fn term(&mut self) -> ExprResult {
@@ -373,6 +407,101 @@ mod test {
             ])
             .unwrap(),
             expr::Expr::UnaryNegate(Box::new(expr::Expr::Number(2.0)))
+        );
+
+        assert!(
+            parse(&vec![
+                Token::new(TokenType::Minus, 1)
+            ]).is_err());
+    }
+
+    #[test]
+    fn comparison() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Number(2.0), 1),
+                Token::new(TokenType::Less, 1),
+                Token::new(TokenType::Number(3.0), 1),
+            ])
+            .unwrap(),
+            expr::Expr::Binary(expr::Binary {
+                left: Box::new(expr::Expr::Number(2.0)),
+                operator: Token::new(TokenType::Less, 1),
+                right: Box::new(expr::Expr::Number(3.0))
+            })
+        );
+
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Number(2.0), 1),
+                Token::new(TokenType::LessEqual, 1),
+                Token::new(TokenType::Number(3.0), 1),
+            ])
+            .unwrap(),
+            expr::Expr::Binary(expr::Binary {
+                left: Box::new(expr::Expr::Number(2.0)),
+                operator: Token::new(TokenType::LessEqual, 1),
+                right: Box::new(expr::Expr::Number(3.0))
+            })
+        );
+
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Number(2.0), 1),
+                Token::new(TokenType::Greater, 1),
+                Token::new(TokenType::Number(3.0), 1),
+            ])
+            .unwrap(),
+            expr::Expr::Binary(expr::Binary {
+                left: Box::new(expr::Expr::Number(2.0)),
+                operator: Token::new(TokenType::Greater, 1),
+                right: Box::new(expr::Expr::Number(3.0))
+            })
+        );
+
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Number(2.0), 1),
+                Token::new(TokenType::GreaterEqual, 1),
+                Token::new(TokenType::Number(3.0), 1),
+            ])
+            .unwrap(),
+            expr::Expr::Binary(expr::Binary {
+                left: Box::new(expr::Expr::Number(2.0)),
+                operator: Token::new(TokenType::GreaterEqual, 1),
+                right: Box::new(expr::Expr::Number(3.0))
+            })
+        );
+    }
+
+    #[test]
+    fn equality() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Number(3.0), 1),
+                Token::new(TokenType::EqualEqual, 1),
+                Token::new(TokenType::Number(3.0), 1),
+            ])
+            .unwrap(),
+            expr::Expr::Binary(expr::Binary {
+                left: Box::new(expr::Expr::Number(3.0)),
+                operator: Token::new(TokenType::EqualEqual, 1),
+                right: Box::new(expr::Expr::Number(3.0))
+            })
+        );
+
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Number(2.0), 1),
+                Token::new(TokenType::BangEqual, 1),
+                Token::new(TokenType::Number(3.0), 1),
+            ])
+            .unwrap(),
+            expr::Expr::Binary(expr::Binary {
+                left: Box::new(expr::Expr::Number(2.0)),
+                operator: Token::new(TokenType::BangEqual, 1),
+                right: Box::new(expr::Expr::Number(3.0))
+            })
         );
     }
 }

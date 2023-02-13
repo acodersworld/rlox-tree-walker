@@ -51,6 +51,32 @@ impl expr::ExprVisitor<EvalResult> for Interpreter {
         };
 
         match binary.operator.token_type {
+            TokenType::Less => {
+                let (l, r) = get_numbers()?;
+                Ok(EvalValue::Bool(l < r))
+            },
+            TokenType::LessEqual => {
+                let (l, r) = get_numbers()?;
+                Ok(EvalValue::Bool(l <= r))
+            },
+            TokenType::Greater => {
+                let (l, r) = get_numbers()?;
+                Ok(EvalValue::Bool(l > r))
+            },
+            TokenType::GreaterEqual => {
+                let (l, r) = get_numbers()?;
+                Ok(EvalValue::Bool(l >= r))
+            },
+
+            TokenType::EqualEqual => {
+                let (l, r) = get_numbers()?;
+                Ok(EvalValue::Bool(l == r))
+            },
+            TokenType::BangEqual => {
+                let (l, r) = get_numbers()?;
+                Ok(EvalValue::Bool(l != r))
+            },
+
             TokenType::Minus => {
                 let (l, r) = get_numbers()?;
                 Ok(EvalValue::Number(l - r))
