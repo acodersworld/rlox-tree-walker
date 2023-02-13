@@ -5,6 +5,7 @@ mod lox;
 mod parser;
 mod scanner;
 mod token;
+mod stmt;
 
 use std::env;
 
