@@ -47,19 +47,55 @@ impl<'a> Parser<'a> {
         return None;
     }
 
-    fn statement(&mut self) -> StmtResult {
-        let expr = self.expression()?;
+    fn consume_token(&mut self, token_type: TokenType, error_message: &str) -> Result<(), std::vec::Vec<String>> {
+        if self.check(&token_type) {
+            self.iter.next();
+            return Ok(())
+        }
 
-        if let Some(token) = self.iter.next() {
-            if token.token_type != TokenType::SemiColon {
-            return Err(vec![format!("Expected ';' but found {} at line {}", token.to_string(), token.line)])
-            }
+        if let Some(token) = self.iter.peek() {
+            Err(vec![format!("Line {} at '{}': {}", token.line, (**token).to_string(), error_message.to_string())])
         }
         else {
-            return Err(vec!["Expected ';' but found EOF".to_owned()])
+            Err(vec![format!("At EOF: {}", error_message.to_string())])
+        }
+    }
+
+    fn statement(&mut self) -> StmtResult {
+        match self.iter.peek() {
+            Some(token) => {
+                match token.token_type {
+                    TokenType::Print => {
+                        self.iter.next();
+                        return self.print_stmt()
+                    }
+                    _ => {}
+                }
+            },
+            _ => {}
         }
 
+        return self.expr_stmt();
+    }
+
+    fn expr_stmt(&mut self) -> StmtResult {
+        let expr = self.expression()?;
+
+        self.consume_token(TokenType::SemiColon, "Expected ';' after expression")?;
+
         Ok(stmt::Stmt::Expr(expr))
+    }
+
+    fn print_stmt(&mut self) -> StmtResult {
+        let mut exprs = vec![self.expression()?];
+
+        while self.match_tokens(&[TokenType::Comma]).is_some() {
+            exprs.push(self.expression()?);
+        }
+
+        self.consume_token(TokenType::SemiColon, "Expected ';' after print statement")?;
+
+        Ok(stmt::Stmt::Print(exprs))
     }
 
     fn expression(&mut self) -> ExprResult {
@@ -632,6 +668,29 @@ mod test {
                     operator: Token::new(TokenType::And, 1),
                     right: Box::new(expr::Expr::Number(3.0))
                 })
+            )]
+        );
+    }
+
+    #[test]
+    fn print() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Number(3.0), 1),
+                Token::new(TokenType::Comma, 1),
+                Token::new(TokenType::Str("Hello, ".to_owned()), 1),
+                Token::new(TokenType::Comma, 1),
+                Token::new(TokenType::Str("World".to_owned()), 1),
+                Token::new(TokenType::SemiColon, 1),
+            ])
+            .unwrap(),
+            vec![stmt::Stmt::Print(
+                vec![
+                    expr::Expr::Number(3.0),
+                    expr::Expr::Str("Hello, ".to_owned()),
+                    expr::Expr::Str("World".to_owned())
+                ]
             )]
         );
     }

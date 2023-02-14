@@ -21,7 +21,16 @@ fn run(interpreter: &mut Interpreter, source: &str) -> Result<(), std::vec::Vec<
 
     for st in stmts {
         match st {
-            stmt::Stmt::Expr(expr) => println!("{:#?}", interpreter.evaluate_expr(&expr))
+            stmt::Stmt::Expr(expr) => println!("{:#?}", interpreter.evaluate_expr(&expr)),
+            stmt::Stmt::Print(exprs) => {
+                for expr in exprs {
+                    match interpreter.evaluate_expr(&expr) {
+                        Ok(value) => print!("{} ", value),
+                        Err(e) => { return Err(vec![e]) }
+                    }
+                }
+                println!("");
+            }
         }
     }
     Ok(())
