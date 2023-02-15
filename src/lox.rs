@@ -3,7 +3,6 @@ use std::io::Read;
 use crate::interpreter::Interpreter;
 use crate::parser;
 use crate::scanner;
-use crate::stmt;
 
 pub fn lox_main(args: &[String]) {
     if args.len() > 1 {
@@ -19,19 +18,8 @@ fn run(interpreter: &mut Interpreter, source: &str) -> Result<(), std::vec::Vec<
     let tokens = scanner::scan(source)?;
     let stmts = parser::parse(&tokens)?;
 
-    for st in stmts {
-        match st {
-            stmt::Stmt::Expr(expr) => println!("{:#?}", interpreter.evaluate_expr(&expr)),
-            stmt::Stmt::Print(exprs) => {
-                for expr in exprs {
-                    match interpreter.evaluate_expr(&expr) {
-                        Ok(value) => print!("{} ", value),
-                        Err(e) => { return Err(vec![e]) }
-                    }
-                }
-                println!("");
-            }
-        }
+    if let Err(e) = interpreter.interpret(&stmts) {
+        return Err(vec![e])
     }
     Ok(())
 }

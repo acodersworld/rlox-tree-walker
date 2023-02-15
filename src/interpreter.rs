@@ -1,9 +1,11 @@
 use crate::eval_value::EvalValue;
 use crate::expr;
+use crate::stmt;
 use crate::token::TokenType;
 
 pub struct Interpreter {}
 
+type StmtResult = Result<(), String>;
 type EvalResult = Result<EvalValue, String>;
 impl Interpreter {
     pub fn new() -> Interpreter {
@@ -21,8 +23,59 @@ impl Interpreter {
         truthy_value
     }
 
+    pub fn interpret(&self, stmts: &[stmt::Stmt]) -> StmtResult {
+        self.execute_many(&stmts)
+    }
+
+    pub fn execute(&self, stmt: &stmt::Stmt) -> StmtResult {
+        stmt.accept(self)
+    }
+
+    pub fn execute_many(&self, stmts: &[stmt::Stmt]) -> StmtResult {
+        for stmt in stmts {
+            self.execute(stmt)?;
+        }
+        Ok(())
+    }
+
     pub fn evaluate_expr(&self, expr: &expr::Expr) -> EvalResult {
         return expr.accept(self);
+    }
+}
+
+impl stmt::StmtVisitor<StmtResult> for Interpreter {
+    fn visit_expr(&self, expr: &expr::Expr) -> StmtResult {
+        println!("{:#?}", self.evaluate_expr(&expr));
+        Ok(())
+    }
+
+    fn visit_print(&self, print: &stmt::Print) -> StmtResult {
+        for expr in &print.exprs {
+            match self.evaluate_expr(&expr) {
+                Ok(value) => print!("{} ", value),
+                Err(e) => { return Err(e) }
+            }
+        }
+        println!("");
+        Ok(())
+    }
+
+    fn visit_if(&self, if_ctx: &stmt::If) -> StmtResult {
+        let if_cond_result = self.evaluate_expr(&if_ctx.condition)?;
+        let is_truthy = self.is_truthy(&if_cond_result);
+
+        if is_truthy {
+            self.visit_block(&if_ctx.true_branch)?;
+        }
+        else if let Some(block) = &if_ctx.else_branch {
+            self.visit_block(&block)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_block(&self, block: &stmt::Block) -> StmtResult {
+        self.execute_many(&block.statements)
     }
 }
 

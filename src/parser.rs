@@ -65,6 +65,14 @@ impl<'a> Parser<'a> {
         match self.iter.peek() {
             Some(token) => {
                 match token.token_type {
+                    TokenType::If => {
+                        self.iter.next();
+                        return self.if_stmt()
+                    },
+                    TokenType::LeftBrace => {
+                        self.iter.next();
+                        return self.block_stmt()
+                    },
                     TokenType::Print => {
                         self.iter.next();
                         return self.print_stmt()
@@ -86,6 +94,37 @@ impl<'a> Parser<'a> {
         Ok(stmt::Stmt::Expr(expr))
     }
 
+    fn if_stmt(&mut self) -> StmtResult {
+        self.consume_token(TokenType::LeftParen, "Expected '(' after if")?;
+        let condition = self.expression()?;
+        self.consume_token(TokenType::RightParen, "Expected ')' after if condition")?;
+        self.consume_token(TokenType::LeftBrace, "Expected '{' after if condition")?;
+
+        let true_branch = self.parse_block()?;
+
+        let mut else_branch = None;
+        if self.match_tokens(&[TokenType::Else]).is_some() {
+            self.consume_token(TokenType::LeftBrace, "Expected '{' after if condition")?;
+            else_branch = Some(self.parse_block()?);
+        }
+
+        Ok(stmt::Stmt::If(stmt::If{condition, true_branch, else_branch}))
+    }
+
+    fn parse_block(&mut self) -> Result<stmt::Block, std::vec::Vec<String>> {
+        let mut statements = vec![];
+
+        while self.match_tokens(&[TokenType::RightBrace]).is_none() {
+            statements.push(self.statement()?);
+        }
+
+        Ok(stmt::Block{statements})
+    }
+
+    fn block_stmt(&mut self) -> StmtResult {
+        Ok(stmt::Stmt::Block(self.parse_block()?))
+    }
+
     fn print_stmt(&mut self) -> StmtResult {
         let mut exprs = vec![self.expression()?];
 
@@ -95,7 +134,7 @@ impl<'a> Parser<'a> {
 
         self.consume_token(TokenType::SemiColon, "Expected ';' after print statement")?;
 
-        Ok(stmt::Stmt::Print(exprs))
+        Ok(stmt::Stmt::Print(stmt::Print{exprs}))
     }
 
     fn expression(&mut self) -> ExprResult {
@@ -242,8 +281,8 @@ impl<'a> Parser<'a> {
 
                 _ => {
                     return Err(vec![format!(
-                        "Expected primary expression, found {}",
-                        t.to_string()
+                        "Expected primary expression, found {} at line {}",
+                        t.to_string(), t.line
                     )])
                 }
             };
@@ -685,13 +724,86 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Print(
-                vec![
+            vec![stmt::Stmt::Print(stmt::Print{
+                exprs: vec![
                     expr::Expr::Number(3.0),
                     expr::Expr::Str("Hello, ".to_owned()),
                     expr::Expr::Str("World".to_owned())
                 ]
-            )]
+            })]
+        );
+    }
+
+    #[test]
+    fn test_if_no_else() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::If, 1),
+                Token::new(TokenType::LeftParen, 1),
+                Token::new(TokenType::True, 1),
+                Token::new(TokenType::RightParen, 1),
+                
+                Token::new(TokenType::LeftBrace, 1),
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Number(1.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::RightBrace, 1),
+            ])
+            .unwrap(),
+            vec![stmt::Stmt::If(stmt::If{
+                condition: expr::Expr::Bool(true),
+                true_branch: stmt::Block{
+                    statements: vec![
+                        stmt::Stmt::Print(stmt::Print{
+                            exprs: vec![expr::Expr::Number(1.0)]
+                        })
+                    ]
+                },
+                else_branch: None
+            })]
+        );
+    }
+
+    #[test]
+    fn test_if_with_else() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::If, 1),
+                Token::new(TokenType::LeftParen, 1),
+                Token::new(TokenType::True, 1),
+                Token::new(TokenType::RightParen, 1),
+                
+                Token::new(TokenType::LeftBrace, 1),
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Number(1.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::RightBrace, 1),
+
+                Token::new(TokenType::Else, 1),
+                Token::new(TokenType::LeftBrace, 1),
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Number(2.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::RightBrace, 1),
+            ])
+            .unwrap(),
+            vec![stmt::Stmt::If(stmt::If{
+                condition: expr::Expr::Bool(true),
+                true_branch: stmt::Block{
+                    statements: vec![
+                        stmt::Stmt::Print(stmt::Print{
+                            exprs: vec![expr::Expr::Number(1.0)]
+                        })
+                    ]
+                },
+                else_branch: Some(stmt::Block{
+                    statements: vec![
+                        stmt::Stmt::Print(stmt::Print{
+                            exprs: vec![expr::Expr::Number(2.0)]
+                        })
+                    ]
+                })
+            })]
         );
     }
 }
