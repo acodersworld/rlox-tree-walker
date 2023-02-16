@@ -19,7 +19,7 @@ fn run(interpreter: &mut Interpreter, source: &str) -> Result<(), std::vec::Vec<
     let stmts = parser::parse(&tokens)?;
 
     if let Err(e) = interpreter.interpret(&stmts) {
-        return Err(vec![e])
+        return Err(vec![e]);
     }
     Ok(())
 }
@@ -29,15 +29,14 @@ fn run_file(filename: &str) {
         let mut buf = String::new();
         if let Err(e) = file.read_to_string(&mut buf) {
             eprintln!("Failed to read from file: {}", e);
-            return
+            return;
         }
 
         let mut interpreter = Interpreter::new();
         if let Err(e) = run(&mut interpreter, &buf) {
             eprintln!("Error: {}", e[0]);
         }
-    }
-    else {
+    } else {
         eprintln!("Failed to open file '{}'", filename);
     }
 

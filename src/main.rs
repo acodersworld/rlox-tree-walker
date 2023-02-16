@@ -4,12 +4,12 @@ mod interpreter;
 mod lox;
 mod parser;
 mod scanner;
-mod token;
 mod stmt;
+mod token;
 
-use std::env;
+use std::{env, vec::Vec};
 
 fn main() {
-    let args: std::vec::Vec<String> = env::args().collect();
+    let args: Vec<String> = env::args().collect();
     lox::lox_main(&args[1..]);
 }

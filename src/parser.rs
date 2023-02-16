@@ -9,9 +9,9 @@ struct Parser<'a> {
     iter: Peekable<Iter<'a, Token>>,
 }
 
-type ExprResult = Result<expr::Expr, std::vec::Vec<String>>;
-type StmtResult = Result<stmt::Stmt, std::vec::Vec<String>>;
-pub fn parse(tokens: &[Token]) -> Result<Vec<stmt::Stmt>, std::vec::Vec<String>> {
+type ExprResult = Result<expr::Expr, Vec<String>>;
+type StmtResult = Result<stmt::Stmt, Vec<String>>;
+pub fn parse(tokens: &[Token]) -> Result<Vec<stmt::Stmt>, Vec<String>> {
     let mut parser = Parser {
         iter: tokens.iter().peekable(),
     };
@@ -47,38 +47,44 @@ impl<'a> Parser<'a> {
         return None;
     }
 
-    fn consume_token(&mut self, token_type: TokenType, error_message: &str) -> Result<(), std::vec::Vec<String>> {
+    fn consume_token(
+        &mut self,
+        token_type: TokenType,
+        error_message: &str,
+    ) -> Result<(), Vec<String>> {
         if self.check(&token_type) {
             self.iter.next();
-            return Ok(())
+            return Ok(());
         }
 
         if let Some(token) = self.iter.peek() {
-            Err(vec![format!("Line {} at '{}': {}", token.line, (**token).to_string(), error_message.to_string())])
-        }
-        else {
+            Err(vec![format!(
+                "Line {} at '{}': {}",
+                token.line,
+                (**token).to_string(),
+                error_message.to_string()
+            )])
+        } else {
             Err(vec![format!("At EOF: {}", error_message.to_string())])
         }
     }
 
     fn statement(&mut self) -> StmtResult {
         match self.iter.peek() {
-            Some(token) => {
-                match token.token_type {
-                    TokenType::If => {
-                        self.iter.next();
-                        return self.if_stmt()
-                    },
-                    TokenType::LeftBrace => {
-                        self.iter.next();
-                        return self.block_stmt()
-                    },
-                    TokenType::Print => {
-                        self.iter.next();
-                        return self.print_stmt()
-                    }
-                    _ => {}
+            Some(token) => match token.token_type {
+                TokenType::If => {
+                    self.iter.next();
+                    return self.if_stmt();
                 }
+                TokenType::LeftBrace => {
+                    self.iter.next();
+                    return self.block_stmt();
+                }
+                TokenType::Print => {
+                    self.iter.next();
+                    return self.print_stmt();
+                }
+                _ => {}
             },
             _ => {}
         }
@@ -91,38 +97,32 @@ impl<'a> Parser<'a> {
 
         self.consume_token(TokenType::SemiColon, "Expected ';' after expression")?;
 
-        Ok(stmt::Stmt::Expr(expr))
+        Ok(stmt::new_expr(expr))
     }
 
     fn if_stmt(&mut self) -> StmtResult {
         self.consume_token(TokenType::LeftParen, "Expected '(' after if")?;
         let condition = self.expression()?;
         self.consume_token(TokenType::RightParen, "Expected ')' after if condition")?;
-        self.consume_token(TokenType::LeftBrace, "Expected '{' after if condition")?;
 
-        let true_branch = self.parse_block()?;
+        let true_branch = self.statement()?;
 
         let mut else_branch = None;
         if self.match_tokens(&[TokenType::Else]).is_some() {
-            self.consume_token(TokenType::LeftBrace, "Expected '{' after if condition")?;
-            else_branch = Some(self.parse_block()?);
+            else_branch = Some(self.statement()?);
         }
 
-        Ok(stmt::Stmt::If(stmt::If{condition, true_branch, else_branch}))
+        Ok(stmt::new_if(condition, true_branch, else_branch))
     }
 
-    fn parse_block(&mut self) -> Result<stmt::Block, std::vec::Vec<String>> {
+    fn block_stmt(&mut self) -> StmtResult {
         let mut statements = vec![];
 
         while self.match_tokens(&[TokenType::RightBrace]).is_none() {
             statements.push(self.statement()?);
         }
 
-        Ok(stmt::Block{statements})
-    }
-
-    fn block_stmt(&mut self) -> StmtResult {
-        Ok(stmt::Stmt::Block(self.parse_block()?))
+        Ok(stmt::new_block(statements))
     }
 
     fn print_stmt(&mut self) -> StmtResult {
@@ -134,7 +134,7 @@ impl<'a> Parser<'a> {
 
         self.consume_token(TokenType::SemiColon, "Expected ';' after print statement")?;
 
-        Ok(stmt::Stmt::Print(stmt::Print{exprs}))
+        Ok(stmt::new_print(exprs))
     }
 
     fn expression(&mut self) -> ExprResult {
@@ -145,9 +145,11 @@ impl<'a> Parser<'a> {
         let expr = self.logical_and()?;
 
         if let Some(operator) = self.match_tokens(&[TokenType::Or]) {
-            let left = Box::new(expr);
-            let right = Box::new(self.comparison()?);
-            return Ok(expr::Expr::Binary(expr::Binary{left, operator, right}))
+            return Ok(expr::new_binary(
+                expr,
+                operator,
+                self.comparison()?,
+            ));
         }
 
         Ok(expr)
@@ -157,9 +159,11 @@ impl<'a> Parser<'a> {
         let expr = self.equality()?;
 
         if let Some(operator) = self.match_tokens(&[TokenType::And]) {
-            let left = Box::new(expr);
-            let right = Box::new(self.comparison()?);
-            return Ok(expr::Expr::Binary(expr::Binary{left, operator, right}))
+            return Ok(expr::new_binary(
+                expr,
+                operator,
+                self.comparison()?
+            ));
         }
 
         Ok(expr)
@@ -171,11 +175,13 @@ impl<'a> Parser<'a> {
         if let Some(operator) = self.match_tokens(&[TokenType::EqualEqual, TokenType::BangEqual]) {
             match operator.token_type {
                 TokenType::EqualEqual | TokenType::BangEqual => {
-                    let left = Box::new(expr);
-                    let right = Box::new(self.comparison()?);
-                    return Ok(expr::Expr::Binary(expr::Binary{left, operator, right}))
-                },
-                _ => panic!("Unexpected token parsing comparison: {:?}", operator)
+                    return Ok(expr::new_binary(
+                        expr,
+                        operator,
+                        self.comparison()?,
+                    ));
+                }
+                _ => panic!("Unexpected token parsing comparison: {:?}", operator),
             }
         }
 
@@ -185,14 +191,24 @@ impl<'a> Parser<'a> {
     fn comparison(&mut self) -> ExprResult {
         let expr = self.term()?;
 
-        if let Some(operator) = self.match_tokens(&[TokenType::Less, TokenType::LessEqual, TokenType::Greater, TokenType::GreaterEqual]) {
+        if let Some(operator) = self.match_tokens(&[
+            TokenType::Less,
+            TokenType::LessEqual,
+            TokenType::Greater,
+            TokenType::GreaterEqual,
+        ]) {
             match operator.token_type {
-                TokenType::Less | TokenType::LessEqual | TokenType::Greater | TokenType::GreaterEqual => {
-                    let left = Box::new(expr);
-                    let right = Box::new(self.term()?);
-                    return Ok(expr::Expr::Binary(expr::Binary{left, operator, right}))
-                },
-                _ => panic!("Unexpected token parsing comparison: {:?}", operator)
+                TokenType::Less
+                | TokenType::LessEqual
+                | TokenType::Greater
+                | TokenType::GreaterEqual => {
+                    return Ok(expr::new_binary(
+                        expr,
+                        operator,
+                        self.term()?,
+                    ))
+                }
+                _ => panic!("Unexpected token parsing comparison: {:?}", operator),
             }
         }
 
@@ -203,11 +219,11 @@ impl<'a> Parser<'a> {
         let mut expr = self.factor()?;
 
         while let Some(token_type) = self.match_tokens(&[TokenType::Minus, TokenType::Plus]) {
-            let binary = expr::Expr::Binary(expr::Binary {
-                left: Box::new(expr),
-                operator: token_type,
-                right: Box::new(self.factor()?),
-            });
+            let binary = expr::new_binary(
+                expr,
+                token_type,
+                self.factor()?,
+            );
 
             expr = binary;
         }
@@ -219,11 +235,11 @@ impl<'a> Parser<'a> {
         let mut expr = self.unary()?;
 
         while let Some(token_type) = self.match_tokens(&[TokenType::Slash, TokenType::Star]) {
-            let binary = expr::Expr::Binary(expr::Binary {
-                left: Box::new(expr),
-                operator: token_type,
-                right: Box::new(self.unary()?),
-            });
+            let binary = expr::new_binary(
+                expr,
+                token_type,
+                self.unary()?,
+            );
 
             expr = binary;
         }
@@ -236,11 +252,11 @@ impl<'a> Parser<'a> {
             match t.token_type {
                 TokenType::Bang => {
                     let expr = self.unary()?;
-                    return Ok(expr::Expr::LogicalNot(Box::new(expr)));
+                    return Ok(expr::new_logical_not(expr));
                 }
                 TokenType::Minus => {
                     let expr = self.unary()?;
-                    return Ok(expr::Expr::UnaryNegate(Box::new(expr)));
+                    return Ok(expr::new_unary_negate(expr));
                 }
                 _ => panic!("Unexpected token parsing unary: {:?}", t),
             }
@@ -253,7 +269,7 @@ impl<'a> Parser<'a> {
         let expr = self.expression()?;
         if let Some(t) = self.iter.next() {
             if t.token_type == TokenType::RightParen {
-                return Ok(expr::Expr::Grouping(Box::new(expr)));
+                return Ok(expr::new_grouping(expr));
             } else {
                 return Err(vec![format!(
                     "Expected ')' but found {} at line {}",
@@ -282,7 +298,8 @@ impl<'a> Parser<'a> {
                 _ => {
                     return Err(vec![format!(
                         "Expected primary expression, found {} at line {}",
-                        t.to_string(), t.line
+                        t.to_string(),
+                        t.line
                     )])
                 }
             };
@@ -299,29 +316,44 @@ mod test {
     #[test]
     fn primary() {
         assert_eq!(
-            parse(&vec![Token::new(TokenType::True, 1), Token::new(TokenType::SemiColon, 1)]).unwrap(),
-            vec![stmt::Stmt::Expr(expr::Expr::Bool(true))]
-        );
-        assert_eq!(
-            parse(&vec![Token::new(TokenType::False, 1), Token::new(TokenType::SemiColon, 1)]).unwrap(),
-            vec![stmt::Stmt::Expr(expr::Expr::Bool(false))]
-        );
-        assert_eq!(
-            parse(&vec![Token::new(TokenType::Nil, 1), Token::new(TokenType::SemiColon, 1)]).unwrap(),
-            vec![stmt::Stmt::Expr(expr::Expr::Nil)]
-        );
-        assert_eq!(
-            parse(&vec![Token::new(TokenType::Number(3.142), 1), Token::new(TokenType::SemiColon, 1)]).unwrap(),
-            vec![stmt::Stmt::Expr(expr::Expr::Number(3.142))]
-        );
-        assert_eq!(
-            parse(&vec![Token::new(
-                TokenType::Str("Hello World".to_owned()),
-                1
-            ),
-            Token::new(TokenType::SemiColon, 1)])
+            parse(&vec![
+                Token::new(TokenType::True, 1),
+                Token::new(TokenType::SemiColon, 1)
+            ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(expr::Expr::Str("Hello World".to_owned()))]
+            vec![stmt::new_expr(expr::Expr::Bool(true))]
+        );
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::False, 1),
+                Token::new(TokenType::SemiColon, 1)
+            ])
+            .unwrap(),
+            vec![stmt::new_expr(expr::Expr::Bool(false))]
+        );
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Nil, 1),
+                Token::new(TokenType::SemiColon, 1)
+            ])
+            .unwrap(),
+            vec![stmt::new_expr(expr::Expr::Nil)]
+        );
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Number(3.142), 1),
+                Token::new(TokenType::SemiColon, 1)
+            ])
+            .unwrap(),
+            vec![stmt::new_expr(expr::Expr::Number(3.142))]
+        );
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Str("Hello World".to_owned()), 1),
+                Token::new(TokenType::SemiColon, 1)
+            ])
+            .unwrap(),
+            vec![stmt::new_expr(expr::Expr::Str("Hello World".to_owned()))]
         );
     }
 
@@ -335,13 +367,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(4.0)),
-                    operator: Token::new(TokenType::Plus, 1),
-                    right: Box::new(expr::Expr::Number(8.5))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(4.0),
+                Token::new(TokenType::Plus, 1),
+                expr::Expr::Number(8.5)
+            ))]
         );
 
         assert_eq!(
@@ -352,13 +382,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(4.0)),
-                    operator: Token::new(TokenType::Minus, 1),
-                    right: Box::new(expr::Expr::Number(8.5))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(4.0),
+                Token::new(TokenType::Minus, 1),
+                expr::Expr::Number(8.5)
+            ))]
         );
     }
 
@@ -372,13 +400,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(4.0)),
-                    operator: Token::new(TokenType::Slash, 1),
-                    right: Box::new(expr::Expr::Number(8.5))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(4.0),
+                Token::new(TokenType::Slash, 1),
+                expr::Expr::Number(8.5)
+            ))]
         );
 
         assert_eq!(
@@ -389,13 +415,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(4.0)),
-                    operator: Token::new(TokenType::Star, 1),
-                    right: Box::new(expr::Expr::Number(8.5))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(4.0),
+                Token::new(TokenType::Star, 1),
+                expr::Expr::Number(8.5)
+            ))]
         );
     }
 
@@ -415,25 +439,23 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Binary(expr::Binary {
-                        left: Box::new(expr::Expr::Number(1.0)),
-                        operator: Token::new(TokenType::Plus, 1),
-                        right: Box::new(expr::Expr::Binary(expr::Binary {
-                            left: Box::new(expr::Expr::Number(2.0)),
-                            operator: Token::new(TokenType::Slash, 1),
-                            right: Box::new(expr::Expr::Number(3.0))
-                        }))
-                    })),
-                    operator: Token::new(TokenType::Minus, 1),
-                    right: Box::new(expr::Expr::Binary(expr::Binary {
-                        left: Box::new(expr::Expr::Number(4.0)),
-                        operator: Token::new(TokenType::Star, 1),
-                        right: Box::new(expr::Expr::Number(5.0))
-                    }))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::new_binary(
+                    expr::Expr::Number(1.0),
+                    Token::new(TokenType::Plus, 1),
+                    expr::new_binary(
+                        expr::Expr::Number(2.0),
+                        Token::new(TokenType::Slash, 1),
+                        expr::Expr::Number(3.0)
+                    )
+                ),
+                Token::new(TokenType::Minus, 1),
+                expr::new_binary(
+                    expr::Expr::Number(4.0),
+                    Token::new(TokenType::Star, 1),
+                    expr::Expr::Number(5.0)
+                )
+            ))]
         );
     }
 
@@ -471,25 +493,19 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Grouping(Box::new(expr::Expr::Binary(
-                        expr::Binary {
-                            left: Box::new(expr::Expr::Number(1.0)),
-                            operator: Token::new(TokenType::Plus, 1),
-                            right: Box::new(expr::Expr::Number(2.0))
-                        }
-                    )))),
-                    operator: Token::new(TokenType::Star, 1),
-                    right: Box::new(expr::Expr::Grouping(Box::new(expr::Expr::Binary(
-                        expr::Binary {
-                            left: Box::new(expr::Expr::Number(3.0)),
-                            operator: Token::new(TokenType::Minus, 1),
-                            right: Box::new(expr::Expr::Number(4.0))
-                        }
-                    ))))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::new_grouping(expr::new_binary(
+                    expr::Expr::Number(1.0),
+                    Token::new(TokenType::Plus, 1),
+                    expr::Expr::Number(2.0)
+                )),
+                Token::new(TokenType::Star, 1),
+                expr::new_grouping(expr::new_binary(
+                    expr::Expr::Number(3.0),
+                    Token::new(TokenType::Minus, 1),
+                    expr::Expr::Number(4.0)
+                ))
+            ))]
         );
     }
 
@@ -515,9 +531,9 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::LogicalNot(Box::new(expr::Expr::Bool(true)))
-            )]
+            vec![stmt::new_expr(expr::new_logical_not(expr::Expr::Bool(
+                true
+            )))]
         );
 
         assert_eq!(
@@ -531,15 +547,13 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::LogicalNot(Box::new(expr::Expr::Grouping(Box::new(
-                    expr::Expr::Binary(expr::Binary {
-                        left: Box::new(expr::Expr::Number(2.0)),
-                        operator: Token::new(TokenType::Plus, 1),
-                        right: Box::new(expr::Expr::Number(5.0))
-                    })
-                ))))
-            )]
+            vec![stmt::new_expr(expr::new_logical_not(expr::new_grouping(
+                expr::new_binary(
+                    expr::Expr::Number(2.0),
+                    Token::new(TokenType::Plus, 1),
+                    expr::Expr::Number(5.0)
+                )
+            )))]
         )
     }
 
@@ -552,15 +566,12 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::UnaryNegate(Box::new(expr::Expr::Number(2.0)))
-            )]
+            vec![stmt::new_expr(expr::new_unary_negate(expr::Expr::Number(
+                2.0
+            )))]
         );
 
-        assert!(
-            parse(&vec![
-                Token::new(TokenType::Minus, 1)
-            ]).is_err());
+        assert!(parse(&vec![Token::new(TokenType::Minus, 1)]).is_err());
     }
 
     #[test]
@@ -573,13 +584,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(2.0)),
-                    operator: Token::new(TokenType::Less, 1),
-                    right: Box::new(expr::Expr::Number(3.0))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(2.0),
+                Token::new(TokenType::Less, 1),
+                expr::Expr::Number(3.0)
+            ))]
         );
 
         assert_eq!(
@@ -590,13 +599,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(2.0)),
-                    operator: Token::new(TokenType::LessEqual, 1),
-                    right: Box::new(expr::Expr::Number(3.0))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(2.0),
+                Token::new(TokenType::LessEqual, 1),
+                expr::Expr::Number(3.0)
+            ))]
         );
 
         assert_eq!(
@@ -607,13 +614,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(2.0)),
-                    operator: Token::new(TokenType::Greater, 1),
-                    right: Box::new(expr::Expr::Number(3.0))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(2.0),
+                Token::new(TokenType::Greater, 1),
+                expr::Expr::Number(3.0)
+            ))]
         );
 
         assert_eq!(
@@ -624,13 +629,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(2.0)),
-                    operator: Token::new(TokenType::GreaterEqual, 1),
-                    right: Box::new(expr::Expr::Number(3.0))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(2.0),
+                Token::new(TokenType::GreaterEqual, 1),
+                expr::Expr::Number(3.0)
+            ))]
         );
     }
 
@@ -644,13 +647,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(3.0)),
-                    operator: Token::new(TokenType::EqualEqual, 1),
-                    right: Box::new(expr::Expr::Number(3.0))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(3.0),
+                Token::new(TokenType::EqualEqual, 1),
+                expr::Expr::Number(3.0)
+            ))]
         );
 
         assert_eq!(
@@ -661,13 +662,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(2.0)),
-                    operator: Token::new(TokenType::BangEqual, 1),
-                    right: Box::new(expr::Expr::Number(3.0))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(2.0),
+                Token::new(TokenType::BangEqual, 1),
+                expr::Expr::Number(3.0)
+            ))]
         );
     }
 
@@ -681,13 +680,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(3.0)),
-                    operator: Token::new(TokenType::Or, 1),
-                    right: Box::new(expr::Expr::Number(3.0))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(3.0),
+                Token::new(TokenType::Or, 1),
+                expr::Expr::Number(3.0)
+            ))]
         );
     }
 
@@ -701,13 +698,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Expr(
-                expr::Expr::Binary(expr::Binary {
-                    left: Box::new(expr::Expr::Number(2.0)),
-                    operator: Token::new(TokenType::And, 1),
-                    right: Box::new(expr::Expr::Number(3.0))
-                })
-            )]
+            vec![stmt::new_expr(expr::new_binary(
+                expr::Expr::Number(2.0),
+                Token::new(TokenType::And, 1),
+                expr::Expr::Number(3.0)
+            ))]
         );
     }
 
@@ -724,13 +719,32 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::Print(stmt::Print{
-                exprs: vec![
-                    expr::Expr::Number(3.0),
-                    expr::Expr::Str("Hello, ".to_owned()),
-                    expr::Expr::Str("World".to_owned())
-                ]
-            })]
+            vec![stmt::new_print(vec![
+                expr::Expr::Number(3.0),
+                expr::Expr::Str("Hello, ".to_owned()),
+                expr::Expr::Str("World".to_owned())
+            ])]
+        );
+    }
+
+    #[test]
+    fn test_if_no_else_no_braces() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::If, 1),
+                Token::new(TokenType::LeftParen, 1),
+                Token::new(TokenType::True, 1),
+                Token::new(TokenType::RightParen, 1),
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Number(1.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+            ])
+            .unwrap(),
+            vec![stmt::new_if(
+                expr::Expr::Bool(true),
+                stmt::new_print(vec![expr::Expr::Number(1.0)]),
+                None
+            )]
         );
     }
 
@@ -742,7 +756,6 @@ mod test {
                 Token::new(TokenType::LeftParen, 1),
                 Token::new(TokenType::True, 1),
                 Token::new(TokenType::RightParen, 1),
-                
                 Token::new(TokenType::LeftBrace, 1),
                 Token::new(TokenType::Print, 1),
                 Token::new(TokenType::Number(1.0), 1),
@@ -750,17 +763,36 @@ mod test {
                 Token::new(TokenType::RightBrace, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::If(stmt::If{
-                condition: expr::Expr::Bool(true),
-                true_branch: stmt::Block{
-                    statements: vec![
-                        stmt::Stmt::Print(stmt::Print{
-                            exprs: vec![expr::Expr::Number(1.0)]
-                        })
-                    ]
-                },
-                else_branch: None
-            })]
+            vec![stmt::new_if(
+                expr::Expr::Bool(true),
+                stmt::new_block(vec![stmt::new_print(vec![expr::Expr::Number(1.0)])]),
+                None
+            )]
+        );
+    }
+
+    #[test]
+    fn test_if_with_else_no_braces() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::If, 1),
+                Token::new(TokenType::LeftParen, 1),
+                Token::new(TokenType::True, 1),
+                Token::new(TokenType::RightParen, 1),
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Number(1.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::Else, 1),
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Number(2.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+            ])
+            .unwrap(),
+            vec![stmt::new_if(
+                expr::Expr::Bool(true),
+                stmt::new_print(vec![expr::Expr::Number(1.0)]),
+                Some(stmt::new_print(vec![expr::Expr::Number(2.0)]))
+            )]
         );
     }
 
@@ -772,13 +804,11 @@ mod test {
                 Token::new(TokenType::LeftParen, 1),
                 Token::new(TokenType::True, 1),
                 Token::new(TokenType::RightParen, 1),
-                
                 Token::new(TokenType::LeftBrace, 1),
                 Token::new(TokenType::Print, 1),
                 Token::new(TokenType::Number(1.0), 1),
                 Token::new(TokenType::SemiColon, 1),
                 Token::new(TokenType::RightBrace, 1),
-
                 Token::new(TokenType::Else, 1),
                 Token::new(TokenType::LeftBrace, 1),
                 Token::new(TokenType::Print, 1),
@@ -787,23 +817,13 @@ mod test {
                 Token::new(TokenType::RightBrace, 1),
             ])
             .unwrap(),
-            vec![stmt::Stmt::If(stmt::If{
-                condition: expr::Expr::Bool(true),
-                true_branch: stmt::Block{
-                    statements: vec![
-                        stmt::Stmt::Print(stmt::Print{
-                            exprs: vec![expr::Expr::Number(1.0)]
-                        })
-                    ]
-                },
-                else_branch: Some(stmt::Block{
-                    statements: vec![
-                        stmt::Stmt::Print(stmt::Print{
-                            exprs: vec![expr::Expr::Number(2.0)]
-                        })
-                    ]
-                })
-            })]
+            vec![stmt::new_if(
+                expr::Expr::Bool(true),
+                stmt::new_block(vec![stmt::new_print(vec![expr::Expr::Number(1.0)])]),
+                Some(stmt::new_block(vec![stmt::new_print(vec![
+                    expr::Expr::Number(2.0)
+                ])]))
+            )]
         );
     }
 }

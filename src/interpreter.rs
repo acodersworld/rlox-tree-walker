@@ -53,7 +53,7 @@ impl stmt::StmtVisitor<StmtResult> for Interpreter {
         for expr in &print.exprs {
             match self.evaluate_expr(&expr) {
                 Ok(value) => print!("{} ", value),
-                Err(e) => { return Err(e) }
+                Err(e) => return Err(e),
             }
         }
         println!("");
@@ -65,10 +65,9 @@ impl stmt::StmtVisitor<StmtResult> for Interpreter {
         let is_truthy = self.is_truthy(&if_cond_result);
 
         if is_truthy {
-            self.visit_block(&if_ctx.true_branch)?;
-        }
-        else if let Some(block) = &if_ctx.else_branch {
-            self.visit_block(&block)?;
+            self.execute(&if_ctx.true_branch)?;
+        } else if let Some(branch) = &if_ctx.else_branch {
+            self.execute(&branch)?;
         }
 
         Ok(())
@@ -107,28 +106,28 @@ impl expr::ExprVisitor<EvalResult> for Interpreter {
             TokenType::Less => {
                 let (l, r) = get_numbers()?;
                 Ok(EvalValue::Bool(l < r))
-            },
+            }
             TokenType::LessEqual => {
                 let (l, r) = get_numbers()?;
                 Ok(EvalValue::Bool(l <= r))
-            },
+            }
             TokenType::Greater => {
                 let (l, r) = get_numbers()?;
                 Ok(EvalValue::Bool(l > r))
-            },
+            }
             TokenType::GreaterEqual => {
                 let (l, r) = get_numbers()?;
                 Ok(EvalValue::Bool(l >= r))
-            },
+            }
 
             TokenType::EqualEqual => {
                 let (l, r) = get_numbers()?;
                 Ok(EvalValue::Bool(l == r))
-            },
+            }
             TokenType::BangEqual => {
                 let (l, r) = get_numbers()?;
                 Ok(EvalValue::Bool(l != r))
-            },
+            }
 
             TokenType::And => {
                 let left = self.evaluate_expr(&binary.left)?;
@@ -137,7 +136,7 @@ impl expr::ExprVisitor<EvalResult> for Interpreter {
                 }
 
                 return Ok(self.evaluate_expr(&binary.right)?);
-            },
+            }
             TokenType::Or => {
                 let left = self.evaluate_expr(&binary.left)?;
                 if self.is_truthy(&left) {
@@ -145,7 +144,7 @@ impl expr::ExprVisitor<EvalResult> for Interpreter {
                 }
 
                 return Ok(self.evaluate_expr(&binary.right)?);
-            },
+            }
 
             TokenType::Minus => {
                 let (l, r) = get_numbers()?;

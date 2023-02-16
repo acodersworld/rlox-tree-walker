@@ -44,3 +44,23 @@ impl Expr {
         }
     }
 }
+
+pub fn new_binary(left: Expr, operator: token::Token, right: Expr) -> Expr {
+    Expr::Binary(Binary {
+        left: Box::new(left),
+        operator,
+        right: Box::new(right),
+    })
+}
+
+pub fn new_grouping(expr: Expr) -> Expr {
+    Expr::Grouping(Box::new(expr))
+}
+
+pub fn new_logical_not(expr: Expr) -> Expr {
+    Expr::LogicalNot(Box::new(expr))
+}
+
+pub fn new_unary_negate(expr: Expr) -> Expr {
+    Expr::UnaryNegate(Box::new(expr))
+}
