@@ -1,15 +1,20 @@
+use crate::environment::Environment;
 use crate::eval_value::EvalValue;
 use crate::expr;
 use crate::stmt;
 use crate::token::TokenType;
 
-pub struct Interpreter {}
+pub struct Interpreter {
+    global_environment: Environment,
+}
 
 type StmtResult = Result<(), String>;
 type EvalResult = Result<EvalValue, String>;
 impl Interpreter {
     pub fn new() -> Interpreter {
-        Interpreter {}
+        Interpreter {
+            global_environment: Environment::new(),
+        }
     }
 
     fn is_truthy(&self, eval_value: &EvalValue) -> bool {
@@ -23,33 +28,33 @@ impl Interpreter {
         truthy_value
     }
 
-    pub fn interpret(&self, stmts: &[stmt::Stmt]) -> StmtResult {
+    pub fn interpret(&mut self, stmts: &[stmt::Stmt]) -> StmtResult {
         self.execute_many(&stmts)
     }
 
-    pub fn execute(&self, stmt: &stmt::Stmt) -> StmtResult {
+    pub fn execute(&mut self, stmt: &stmt::Stmt) -> StmtResult {
         stmt.accept(self)
     }
 
-    pub fn execute_many(&self, stmts: &[stmt::Stmt]) -> StmtResult {
+    pub fn execute_many(&mut self, stmts: &[stmt::Stmt]) -> StmtResult {
         for stmt in stmts {
             self.execute(stmt)?;
         }
         Ok(())
     }
 
-    pub fn evaluate_expr(&self, expr: &expr::Expr) -> EvalResult {
+    pub fn evaluate_expr(&mut self, expr: &expr::Expr) -> EvalResult {
         return expr.accept(self);
     }
 }
 
 impl stmt::StmtVisitor<StmtResult> for Interpreter {
-    fn visit_expr(&self, expr: &expr::Expr) -> StmtResult {
+    fn visit_expr(&mut self, expr: &expr::Expr) -> StmtResult {
         println!("{:#?}", self.evaluate_expr(&expr));
         Ok(())
     }
 
-    fn visit_print(&self, print: &stmt::Print) -> StmtResult {
+    fn visit_print(&mut self, print: &stmt::Print) -> StmtResult {
         for expr in &print.exprs {
             match self.evaluate_expr(&expr) {
                 Ok(value) => print!("{} ", value),
@@ -60,7 +65,7 @@ impl stmt::StmtVisitor<StmtResult> for Interpreter {
         Ok(())
     }
 
-    fn visit_if(&self, if_ctx: &stmt::If) -> StmtResult {
+    fn visit_if(&mut self, if_ctx: &stmt::If) -> StmtResult {
         let if_cond_result = self.evaluate_expr(&if_ctx.condition)?;
         let is_truthy = self.is_truthy(&if_cond_result);
 
@@ -73,8 +78,14 @@ impl stmt::StmtVisitor<StmtResult> for Interpreter {
         Ok(())
     }
 
-    fn visit_block(&self, block: &stmt::Block) -> StmtResult {
+    fn visit_block(&mut self, block: &stmt::Block) -> StmtResult {
         self.execute_many(&block.statements)
+    }
+
+    fn visit_var(&mut self, var: &stmt::Var) -> StmtResult {
+        let initializer = self.evaluate_expr(&var.initializer)?;
+        self.global_environment.set(&var.name, initializer);
+        Ok(())
     }
 }
 
@@ -91,7 +102,7 @@ impl expr::ExprVisitor<EvalResult> for Interpreter {
         return Ok(EvalValue::Number(*literal_number));
     }
 
-    fn visit_binary(&self, binary: &expr::Binary) -> EvalResult {
+    fn visit_binary(&mut self, binary: &expr::Binary) -> EvalResult {
         let left = self.evaluate_expr(&binary.left)?;
         let right = self.evaluate_expr(&binary.right)?;
 
@@ -167,21 +178,50 @@ impl expr::ExprVisitor<EvalResult> for Interpreter {
         }
     }
 
-    fn visit_grouping(&self, grouping: &expr::Expr) -> EvalResult {
+    fn visit_grouping(&mut self, grouping: &expr::Expr) -> EvalResult {
         self.evaluate_expr(grouping)
     }
 
-    fn visit_logical_not(&self, expr: &expr::Expr) -> EvalResult {
+    fn visit_logical_not(&mut self, expr: &expr::Expr) -> EvalResult {
         let result = self.evaluate_expr(expr)?;
         Ok(EvalValue::Bool(!self.is_truthy(&result)))
     }
 
-    fn visit_unary_negate(&self, expr: &expr::Expr) -> EvalResult {
+    fn visit_unary_negate(&mut self, expr: &expr::Expr) -> EvalResult {
         let result = self.evaluate_expr(expr)?;
         match result {
             EvalValue::Number(n) => return Ok(EvalValue::Number(-n)),
             _ => return Err("Unary negate expected number".to_owned()),
         }
+    }
+
+    fn visit_variable(&mut self, variable: &expr::Variable) -> EvalResult {
+        let value = match self.global_environment.get(&variable.name) {
+            Some(v) => v,
+            None => {
+                return Err(format!(
+                    "Undefined variable {} at line {}",
+                    variable.name, variable.line
+                ))
+            }
+        };
+
+        Ok(value)
+    }
+
+    fn visit_assignment(&mut self, assignment: &expr::Assignment) -> EvalResult {
+        if self.global_environment.get(&assignment.target).is_none() {
+            return Err(format!(
+                "Undefined variable {} at line {}",
+                assignment.target, assignment.line
+            ));
+        }
+
+        let value = self.evaluate_expr(&assignment.expr)?;
+
+        self.global_environment
+            .set(&assignment.target, value.clone());
+        Ok(value)
     }
 
     fn visit_nil(&self) -> EvalResult {

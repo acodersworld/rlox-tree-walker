@@ -70,8 +70,8 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> StmtResult {
-        match self.iter.peek() {
-            Some(token) => match token.token_type {
+        if let Some(token) = self.iter.peek() {
+            match token.token_type {
                 TokenType::If => {
                     self.iter.next();
                     return self.if_stmt();
@@ -84,9 +84,12 @@ impl<'a> Parser<'a> {
                     self.iter.next();
                     return self.print_stmt();
                 }
+                TokenType::Var => {
+                    self.iter.next();
+                    return self.var_stmt();
+                }
                 _ => {}
-            },
-            _ => {}
+            }
         }
 
         return self.expr_stmt();
@@ -137,19 +140,52 @@ impl<'a> Parser<'a> {
         Ok(stmt::new_print(exprs))
     }
 
+    fn var_stmt(&mut self) -> StmtResult {
+        let (identifier_name, line) = {
+            let token = match self.iter.next() {
+                Some(t) => t,
+                None => return Err(vec![format!("Expected identifier after 'var'")]),
+            };
+
+            match &token.token_type {
+                TokenType::Identifier(name) => (name, token.line),
+                _ => return Err(vec![format!("Expected identifier after 'var'")]),
+            }
+        };
+
+        self.consume_token(TokenType::Equal, "Expected '=' after var identifier")?;
+
+        let expr = self.expression()?;
+
+        self.consume_token(TokenType::SemiColon, "Expected ';' after print statement")?;
+
+        Ok(stmt::new_var(identifier_name, line, expr))
+    }
+
     fn expression(&mut self) -> ExprResult {
-        return self.logical_or();
+        return self.assignment();
+    }
+
+    fn assignment(&mut self) -> ExprResult {
+        let mut expr = self.logical_or()?;
+
+        if self.match_tokens(&[TokenType::Equal]).is_some() {
+            match &expr {
+                expr::Expr::Variable(variable) => {
+                    expr = expr::new_assignment(&variable.name, variable.line, self.expression()?);
+                }
+                _ => return Err(vec![format!("Invalid assignment target")]),
+            }
+        }
+
+        Ok(expr)
     }
 
     fn logical_or(&mut self) -> ExprResult {
         let expr = self.logical_and()?;
 
         if let Some(operator) = self.match_tokens(&[TokenType::Or]) {
-            return Ok(expr::new_binary(
-                expr,
-                operator,
-                self.comparison()?,
-            ));
+            return Ok(expr::new_binary(expr, operator, self.comparison()?));
         }
 
         Ok(expr)
@@ -159,11 +195,7 @@ impl<'a> Parser<'a> {
         let expr = self.equality()?;
 
         if let Some(operator) = self.match_tokens(&[TokenType::And]) {
-            return Ok(expr::new_binary(
-                expr,
-                operator,
-                self.comparison()?
-            ));
+            return Ok(expr::new_binary(expr, operator, self.comparison()?));
         }
 
         Ok(expr)
@@ -175,11 +207,7 @@ impl<'a> Parser<'a> {
         if let Some(operator) = self.match_tokens(&[TokenType::EqualEqual, TokenType::BangEqual]) {
             match operator.token_type {
                 TokenType::EqualEqual | TokenType::BangEqual => {
-                    return Ok(expr::new_binary(
-                        expr,
-                        operator,
-                        self.comparison()?,
-                    ));
+                    return Ok(expr::new_binary(expr, operator, self.comparison()?));
                 }
                 _ => panic!("Unexpected token parsing comparison: {:?}", operator),
             }
@@ -202,11 +230,7 @@ impl<'a> Parser<'a> {
                 | TokenType::LessEqual
                 | TokenType::Greater
                 | TokenType::GreaterEqual => {
-                    return Ok(expr::new_binary(
-                        expr,
-                        operator,
-                        self.term()?,
-                    ))
+                    return Ok(expr::new_binary(expr, operator, self.term()?))
                 }
                 _ => panic!("Unexpected token parsing comparison: {:?}", operator),
             }
@@ -219,11 +243,7 @@ impl<'a> Parser<'a> {
         let mut expr = self.factor()?;
 
         while let Some(token_type) = self.match_tokens(&[TokenType::Minus, TokenType::Plus]) {
-            let binary = expr::new_binary(
-                expr,
-                token_type,
-                self.factor()?,
-            );
+            let binary = expr::new_binary(expr, token_type, self.factor()?);
 
             expr = binary;
         }
@@ -235,11 +255,7 @@ impl<'a> Parser<'a> {
         let mut expr = self.unary()?;
 
         while let Some(token_type) = self.match_tokens(&[TokenType::Slash, TokenType::Star]) {
-            let binary = expr::new_binary(
-                expr,
-                token_type,
-                self.unary()?,
-            );
+            let binary = expr::new_binary(expr, token_type, self.unary()?);
 
             expr = binary;
         }
@@ -282,6 +298,10 @@ impl<'a> Parser<'a> {
         }
     }
 
+    fn identifier(&mut self, name: &str, line: u32) -> ExprResult {
+        Ok(expr::new_variable(name, line))
+    }
+
     fn primary(&mut self) -> ExprResult {
         if let Some(t) = self.iter.next() {
             match &t.token_type {
@@ -294,6 +314,8 @@ impl<'a> Parser<'a> {
                 TokenType::Str(value) => return Ok(expr::Expr::Str(value.clone())),
 
                 TokenType::LeftParen => return self.grouping(),
+
+                TokenType::Identifier(name) => return self.identifier(&name, t.line),
 
                 _ => {
                     return Err(vec![format!(
@@ -823,6 +845,37 @@ mod test {
                 Some(stmt::new_block(vec![stmt::new_print(vec![
                     expr::Expr::Number(2.0)
                 ])]))
+            )]
+        );
+    }
+
+    #[test]
+    fn test_var() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Var, 1),
+                Token::new(TokenType::Identifier("variable".to_owned()), 1),
+                Token::new(TokenType::Equal, 1),
+                Token::new(TokenType::Number(10.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+            ])
+            .unwrap(),
+            vec![stmt::new_var("variable", 1, expr::Expr::Number(10.0))]
+        );
+    }
+
+    #[test]
+    fn test_assignment() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Identifier("variable".to_owned()), 1),
+                Token::new(TokenType::Equal, 1),
+                Token::new(TokenType::Number(10.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+            ])
+            .unwrap(),
+            vec![stmt::new_expr(
+                expr::new_assignment("variable", 1, expr::Expr::Number(10.0))
             )]
         );
     }

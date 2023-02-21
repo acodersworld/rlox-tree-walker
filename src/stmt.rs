@@ -19,27 +19,37 @@ pub struct Print {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct Var {
+    pub name: String,
+    pub line: u32,
+    pub initializer: expr::Expr,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(expr::Expr),
     Print(Print),
     If(If),
     Block(Block),
+    Var(Var),
 }
 
 pub trait StmtVisitor<T> {
-    fn visit_expr(&self, expr: &expr::Expr) -> T;
-    fn visit_print(&self, print: &Print) -> T;
-    fn visit_if(&self, if_cxt: &If) -> T;
-    fn visit_block(&self, block: &Block) -> T;
+    fn visit_expr(&mut self, expr: &expr::Expr) -> T;
+    fn visit_print(&mut self, print: &Print) -> T;
+    fn visit_if(&mut self, if_cxt: &If) -> T;
+    fn visit_block(&mut self, block: &Block) -> T;
+    fn visit_var(&mut self, var: &Var) -> T;
 }
 
 impl Stmt {
-    pub fn accept<T>(&self, visitor: &impl StmtVisitor<T>) -> T {
+    pub fn accept<T>(&self, visitor: &mut impl StmtVisitor<T>) -> T {
         match self {
             Stmt::Expr(expr) => visitor.visit_expr(expr),
             Stmt::Print(print) => visitor.visit_print(print),
             Stmt::If(if_ctx) => visitor.visit_if(if_ctx),
             Stmt::Block(block) => visitor.visit_block(block),
+            Stmt::Var(var) => visitor.visit_var(var),
         }
     }
 }
@@ -62,4 +72,12 @@ pub fn new_if(condition: expr::Expr, true_branch: Stmt, else_branch: Option<Stmt
 
 pub fn new_block(statements: Vec<Stmt>) -> Stmt {
     Stmt::Block(Block { statements })
+}
+
+pub fn new_var(name: &str, line: u32, initializer: expr::Expr) -> Stmt {
+    Stmt::Var(Var {
+        name: name.to_string(),
+        line,
+        initializer,
+    })
 }

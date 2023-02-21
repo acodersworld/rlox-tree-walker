@@ -1,3 +1,4 @@
+mod environment;
 mod eval_value;
 mod expr;
 mod interpreter;
