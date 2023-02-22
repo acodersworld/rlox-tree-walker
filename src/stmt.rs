@@ -26,12 +26,27 @@ pub struct Var {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct While {
+    pub condition: expr::Expr,
+    pub body: Box<Stmt>
+}
+
+#[derive(Debug, PartialEq)]
+pub struct For {
+    pub initializer: Option<Box<Stmt>>,
+    pub condition: Option<expr::Expr>,
+    pub loop_eval: Option<expr::Expr>,
+    pub body: Box<Stmt>
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(expr::Expr),
     Print(Print),
     If(If),
     Block(Block),
     Var(Var),
+    While(While),
 }
 
 pub trait StmtVisitor<T> {
@@ -40,6 +55,7 @@ pub trait StmtVisitor<T> {
     fn visit_if(&mut self, if_cxt: &If) -> T;
     fn visit_block(&mut self, block: &Block) -> T;
     fn visit_var(&mut self, var: &Var) -> T;
+    fn visit_while(&mut self, while_ctx: &While) -> T;
 }
 
 impl Stmt {
@@ -50,6 +66,7 @@ impl Stmt {
             Stmt::If(if_ctx) => visitor.visit_if(if_ctx),
             Stmt::Block(block) => visitor.visit_block(block),
             Stmt::Var(var) => visitor.visit_var(var),
+            Stmt::While(while_ctx) => visitor.visit_while(while_ctx),
         }
     }
 }
@@ -78,6 +95,14 @@ pub fn new_var(name: &str, line: u32, initializer: expr::Expr) -> Stmt {
     Stmt::Var(Var {
         name: name.to_string(),
         line,
-        initializer,
+        initializer
     })
 }
+
+pub fn new_while(condition: expr::Expr, body: Stmt) -> Stmt {
+    Stmt::While(While{
+        condition,
+        body: Box::new(body)
+    })
+}
+

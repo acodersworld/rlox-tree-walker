@@ -84,7 +84,19 @@ impl stmt::StmtVisitor<StmtResult> for Interpreter {
 
     fn visit_var(&mut self, var: &stmt::Var) -> StmtResult {
         let initializer = self.evaluate_expr(&var.initializer)?;
-        self.global_environment.set(&var.name, initializer);
+        self.global_environment.set(&var.name, initializer.clone());
+        Ok(())
+    }
+
+    fn visit_while(&mut self, while_ctx: &stmt::While) -> StmtResult {
+        loop {
+            let cond_eval = self.evaluate_expr(&while_ctx.condition)?;
+            if !self.is_truthy(&cond_eval) {
+                break;
+            }
+
+            self.execute(&while_ctx.body)?;
+        }
         Ok(())
     }
 }
