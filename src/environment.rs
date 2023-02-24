@@ -1,6 +1,7 @@
 use crate::eval_value::EvalValue;
 use std::collections::HashMap;
 
+#[derive(Debug)]
 pub struct Environment {
     values: HashMap<String, EvalValue>,
 }
@@ -16,7 +17,12 @@ impl Environment {
         self.values.get(name).cloned()
     }
 
-    pub fn set(&mut self, name: &str, value: EvalValue) {
+    pub fn set(&mut self, name: &str, value: EvalValue) -> bool {
+        if self.values.contains_key(name) {
+            return false
+        }
+
         self.values.insert(name.to_string(), value);
+        return true
     }
 }

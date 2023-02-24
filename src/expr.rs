@@ -21,6 +21,13 @@ pub struct Assignment {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct Call {
+    pub callee: Box<Expr>,
+    pub line: u32,
+    pub arguments: Vec<Box<Expr>>
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Expr {
     Bool(bool),
     Str(String),
@@ -31,6 +38,7 @@ pub enum Expr {
     UnaryNegate(Box<Expr>),
     Variable(Variable),
     Assignment(Assignment),
+    Call(Call),
     Nil,
 }
 
@@ -44,6 +52,7 @@ pub trait ExprVisitor<T> {
     fn visit_unary_negate(&mut self, expr: &Expr) -> T;
     fn visit_variable(&mut self, variable: &Variable) -> T;
     fn visit_assignment(&mut self, assignment: &Assignment) -> T;
+    fn visit_call(&mut self, call: &Call) -> T;
     fn visit_nil(&self) -> T;
 }
 
@@ -59,6 +68,7 @@ impl Expr {
             Expr::UnaryNegate(un) => visitor.visit_unary_negate(un),
             Expr::Variable(v) => visitor.visit_variable(&v),
             Expr::Assignment(v) => visitor.visit_assignment(&v),
+            Expr::Call(v) => visitor.visit_call(&v),
             Expr::Nil => visitor.visit_nil(),
         }
     }
@@ -97,4 +107,8 @@ pub fn new_assignment(target: &str, line: u32, expr: Expr) -> Expr {
         line,
         expr: Box::new(expr),
     })
+}
+
+pub fn new_call(callee: Expr, line: u32, arguments: Vec<Box<Expr>>) -> Expr {
+    Expr::Call(Call {callee: Box::new(callee), line, arguments})
 }

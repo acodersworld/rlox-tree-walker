@@ -1,5 +1,6 @@
 use crate::expr;
 use std::vec::Vec;
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq)]
 pub struct Block {
@@ -40,6 +41,20 @@ pub struct For {
 }
 
 #[derive(Debug, PartialEq)]
+pub struct Function {
+    pub name: String,
+    pub parameters: Vec<String>,
+    pub statements: Vec<Stmt>,
+    pub line: u32
+}
+
+impl Function {
+    pub fn arity(&self) -> u32 {
+        self.parameters.len() as u32
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum Stmt {
     Expr(expr::Expr),
     Print(Print),
@@ -47,6 +62,7 @@ pub enum Stmt {
     Block(Block),
     Var(Var),
     While(While),
+    Function(Rc<Function>),
 }
 
 pub trait StmtVisitor<T> {
@@ -56,6 +72,7 @@ pub trait StmtVisitor<T> {
     fn visit_block(&mut self, block: &Block) -> T;
     fn visit_var(&mut self, var: &Var) -> T;
     fn visit_while(&mut self, while_ctx: &While) -> T;
+    fn visit_function(&mut self, function: &Rc<Function>) -> T;
 }
 
 impl Stmt {
@@ -67,6 +84,7 @@ impl Stmt {
             Stmt::Block(block) => visitor.visit_block(block),
             Stmt::Var(var) => visitor.visit_var(var),
             Stmt::While(while_ctx) => visitor.visit_while(while_ctx),
+            Stmt::Function(function) => visitor.visit_function(function),
         }
     }
 }
@@ -104,5 +122,14 @@ pub fn new_while(condition: expr::Expr, body: Stmt) -> Stmt {
         condition,
         body: Box::new(body)
     })
+}
+
+pub fn new_function(name: String, parameters: Vec<String>, statements: Vec<Stmt>, line: u32) -> Stmt {
+    Stmt::Function(Rc::new(Function{
+        name,
+        parameters,
+        statements,
+        line
+    }))
 }
 

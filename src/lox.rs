@@ -1,6 +1,7 @@
 use std::io::Read;
 
-use crate::interpreter::Interpreter;
+use crate::interpreter::InterpreterContext;
+use crate::environment::Environment;
 use crate::parser;
 use crate::scanner;
 
@@ -14,7 +15,7 @@ pub fn lox_main(args: &[String]) {
     }
 }
 
-fn run(interpreter: &mut Interpreter, source: &str) -> Result<(), std::vec::Vec<String>> {
+fn run(interpreter: &mut InterpreterContext, source: &str) -> Result<(), std::vec::Vec<String>> {
     let tokens = scanner::scan(source)?;
     let stmts = parser::parse(&tokens)?;
 
@@ -32,7 +33,8 @@ fn run_file(filename: &str) {
             return;
         }
 
-        let mut interpreter = Interpreter::new();
+        let mut global_environment = Environment::new();
+        let mut interpreter = InterpreterContext::new(&mut global_environment);
         if let Err(e) = run(&mut interpreter, &buf) {
             eprintln!("Error: {}", e[0]);
         }
@@ -44,7 +46,8 @@ fn run_file(filename: &str) {
 }
 
 fn run_prompt() {
-    let mut interpreter = Interpreter::new();
+    let mut global_environment = Environment::new();
+    let mut interpreter = InterpreterContext::new(&mut global_environment);
 
     let mut line = String::new();
     loop {

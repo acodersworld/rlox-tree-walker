@@ -96,11 +96,65 @@ impl<'a> Parser<'a> {
                     self.iter.next();
                     return self.for_stmt();
                 }
+                TokenType::Fun => {
+                    self.iter.next();
+                    return self.function_stmt();
+                }
                 _ => {}
             }
         }
 
         return self.expr_stmt();
+    }
+
+    fn function_stmt(&mut self) -> StmtResult {
+        let (name, line) = {
+            let next_token = match self.iter.next() {
+                Some(t) => t,
+                None => return Err(vec!["Expected identifer after 'fun', found EOF".to_string()])
+            };
+
+            match &next_token.token_type {
+                TokenType::Identifier(identifier) => (identifier, next_token.line),
+                _ => return Err(vec![format!("Expected identifier after 'fun', found {}", next_token.to_string())])
+            }
+        };
+
+        self.consume_token(TokenType::LeftParen, "Expected '(' after function name")?;
+
+        let mut parameters = vec![];
+
+        if self.match_tokens(&[TokenType::RightParen]).is_none() {
+            loop {
+                let parameter = {
+                    let next_token = match self.iter.next() {
+                        Some(t) => t,
+                        None => return Err(vec!["Expected identifer after 'fun', found EOF".to_string()])
+                    };
+
+                    match &next_token.token_type {
+                        TokenType::Identifier(identifier) => identifier.clone(),
+                        _ => return Err(vec![format!("Expected identifier after 'fun', found {}", next_token.to_string())])
+                    }
+                };
+
+                parameters.push(parameter);
+                if self.match_tokens(&[TokenType::Comma]).is_none() {
+                    break;
+                }
+            }
+
+            self.consume_token(TokenType::RightParen, "Expected ')' after function parameters")?;
+        }
+
+        self.consume_token(TokenType::LeftBrace, "Expected '{' after function parameters")?;
+
+        let mut statements = vec![];
+        while self.match_tokens(&[TokenType::RightBrace]).is_none() {
+            statements.push(self.statement()?);
+        }
+
+        Ok(stmt::new_function(name.clone(), parameters, statements, line))
     }
 
     fn expr_stmt(&mut self) -> StmtResult {
@@ -338,7 +392,30 @@ impl<'a> Parser<'a> {
             }
         }
 
-        return self.primary();
+        return self.call();
+    }
+
+    fn call(&mut self) -> ExprResult {
+        let expr = self.primary()?;
+
+        if let Some(left_param) = self.match_tokens(&[TokenType::LeftParen]) {
+            let mut args = vec![];
+            if self.match_tokens(&[TokenType::RightParen]).is_none() {
+
+                loop {
+                    args.push(Box::new(self.expression()?));
+                    if self.match_tokens(&[TokenType::Comma]).is_none() {
+                        break;
+                    }
+                }
+
+                self.consume_token(TokenType::RightParen, "Expected ')' after function call arguments")?;
+            }
+
+            return Ok(expr::new_call(expr, left_param.line, args))
+        }
+
+        return Ok(expr)
     }
 
     fn grouping(&mut self) -> ExprResult {
@@ -1234,4 +1311,74 @@ mod test {
         );
     }
 
+    #[test]
+    fn test_call() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Identifier("MyFunction".to_owned()), 1),
+                Token::new(TokenType::LeftParen, 1),
+                Token::new(TokenType::Number(10.0), 1),
+                Token::new(TokenType::Comma, 1),
+                Token::new(TokenType::Str("Arg".to_owned()), 1),
+                Token::new(TokenType::Comma, 1),
+                Token::new(TokenType::True, 1),
+                Token::new(TokenType::RightParen, 1),
+                Token::new(TokenType::SemiColon, 1),
+            ])
+            .unwrap(),
+            vec![
+                stmt::new_expr(
+                    expr::new_call(
+                        expr::new_variable("MyFunction", 1),
+                        1,
+                        vec![
+                            Box::new(expr::Expr::Number(10.0)),
+                            Box::new(expr::Expr::Str("Arg".to_owned())),
+                            Box::new(expr::Expr::Bool(true))
+                        ]
+                    )
+                )
+            ]
+        );
+    }
+
+    #[test]
+    fn test_function() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::Fun, 1),
+                Token::new(TokenType::Identifier("MyFunction".to_owned()), 1),
+                Token::new(TokenType::LeftParen, 1),
+                Token::new(TokenType::Identifier("First".to_owned()), 1),
+                Token::new(TokenType::Comma, 1),
+                Token::new(TokenType::Identifier("Second".to_owned()), 1),
+                Token::new(TokenType::Comma, 1),
+                Token::new(TokenType::Identifier("Third".to_owned()), 1),
+                Token::new(TokenType::RightParen, 1),
+
+                Token::new(TokenType::LeftBrace, 1),
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::RightBrace, 1),
+            ])
+            .unwrap(),
+            vec![
+                stmt::new_function(
+                    "MyFunction".to_owned(),
+                    vec![
+                        "First".to_owned(),
+                        "Second".to_owned(),
+                        "Third".to_owned()
+                    ],
+                    vec![
+                        stmt::new_print(vec![
+                            expr::new_variable("counter", 1)
+                        ])
+                    ],
+                    1
+                ),
+            ]
+        );
+    }
 }
