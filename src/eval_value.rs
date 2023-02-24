@@ -10,7 +10,7 @@ pub struct LoxFunction {
 }
 
 impl LoxFunction {
-    pub fn call(&self, global_environment: &mut Environment, arguments: &Vec<EvalValue>) -> Result<(), String> {
+    pub fn call(&self, global_environment: &mut Environment, arguments: &Vec<EvalValue>) -> Result<EvalValue, String> {
         let mut environment = Environment::new();
 
         let parameters = &self.declaration.parameters;
@@ -19,9 +19,13 @@ impl LoxFunction {
         }
 
         let mut local_interpreter = InterpreterContext::new_with_local_env(global_environment, environment);
-        local_interpreter.execute_many(&self.declaration.statements)?;
-
-        Ok(())
+        if let Some(result) = local_interpreter.execute_many(&self.declaration.statements)? {
+            return Ok(result)
+        }
+        else {
+            return Ok(EvalValue::Nil)
+        }
+        
     }
 }
 

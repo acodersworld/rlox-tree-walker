@@ -11,7 +11,7 @@ pub struct InterpreterContext<'a> {
     pub local_environment: Option<Environment>,
 }
 
-type StmtResult = Result<(), String>;
+type StmtResult = Result<Option<EvalValue>, String>;
 type EvalResult = Result<EvalValue, String>;
 impl<'a> InterpreterContext<'a> {
     pub fn new(global_environment: &'a mut Environment) -> InterpreterContext<'a> {
@@ -49,9 +49,12 @@ impl<'a> InterpreterContext<'a> {
 
     pub fn execute_many(&mut self, stmts: &[stmt::Stmt]) -> StmtResult {
         for stmt in stmts {
-            self.execute(stmt)?;
+            let result = self.execute(stmt)?;
+            if result.is_some() {
+                return Ok(result)
+            }
         }
-        Ok(())
+        Ok(None)
     }
 
     pub fn evaluate_expr(&mut self, expr: &expr::Expr) -> EvalResult {
@@ -63,7 +66,7 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
     fn visit_expr(&mut self, expr: &expr::Expr) -> StmtResult {
         //println!("{:#?}", self.evaluate_expr(&expr));
         self.evaluate_expr(&expr)?;
-        Ok(())
+        Ok(None)
     }
 
     fn visit_print(&mut self, print: &stmt::Print) -> StmtResult {
@@ -74,7 +77,7 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
             }
         }
         println!("");
-        Ok(())
+        Ok(None)
     }
 
     fn visit_if(&mut self, if_ctx: &stmt::If) -> StmtResult {
@@ -82,12 +85,18 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
         let is_truthy = self.is_truthy(&if_cond_result);
 
         if is_truthy {
-            self.execute(&if_ctx.true_branch)?;
+            let result = self.execute(&if_ctx.true_branch)?;
+            if result.is_some() {
+                return Ok(result)
+            }
         } else if let Some(branch) = &if_ctx.else_branch {
-            self.execute(&branch)?;
+            let result = self.execute(&branch)?;
+            if result.is_some() {
+                return Ok(result)
+            }
         }
 
-        Ok(())
+        Ok(None)
     }
 
     fn visit_block(&mut self, block: &stmt::Block) -> StmtResult {
@@ -103,7 +112,7 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
         else {
             self.global_environment.set(&var.name, initializer.clone());
         }
-        Ok(())
+        Ok(None)
     }
 
     fn visit_while(&mut self, while_ctx: &stmt::While) -> StmtResult {
@@ -113,9 +122,12 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
                 break;
             }
 
-            self.execute(&while_ctx.body)?;
+            let result = self.execute(&while_ctx.body)?;
+            if result.is_some() {
+                return Ok(result)
+            }
         }
-        Ok(())
+        Ok(None)
     }
 
     fn visit_function(&mut self, function: &Rc<stmt::Function>) -> StmtResult {
@@ -124,9 +136,13 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
         };
         
         self.global_environment.set(&function.name, eval_value::EvalValue::Function(lox_function));
-        return Ok(())
+        return Ok(None)
     }
 
+    fn visit_return(&mut self, expr: &expr::Expr) -> StmtResult {
+        let value = self.evaluate_expr(expr)?;
+        return Ok(Some(value))
+    }
 }
 
 impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
@@ -298,7 +314,7 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
                     arguments.push(self.evaluate_expr(arg)?);
                 }
 
-                f.call(&mut self.global_environment, &arguments)?;
+                return Ok(f.call(&mut self.global_environment, &arguments)?)
             },
             _ => {
             }

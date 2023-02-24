@@ -100,6 +100,10 @@ impl<'a> Parser<'a> {
                     self.iter.next();
                     return self.function_stmt();
                 }
+                TokenType::Return => {
+                    self.iter.next();
+                    return self.return_stmt();
+                }
                 _ => {}
             }
         }
@@ -155,6 +159,12 @@ impl<'a> Parser<'a> {
         }
 
         Ok(stmt::new_function(name.clone(), parameters, statements, line))
+    }
+
+    fn return_stmt(&mut self) -> StmtResult {
+        let expr = self.expression()?;
+        self.consume_token(TokenType::SemiColon, "Expected ';' after expression")?;
+        Ok(stmt::new_return(expr))
     }
 
     fn expr_stmt(&mut self) -> StmtResult {

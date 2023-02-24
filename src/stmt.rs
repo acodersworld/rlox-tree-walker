@@ -63,6 +63,7 @@ pub enum Stmt {
     Var(Var),
     While(While),
     Function(Rc<Function>),
+    Return(expr::Expr),
 }
 
 pub trait StmtVisitor<T> {
@@ -73,6 +74,7 @@ pub trait StmtVisitor<T> {
     fn visit_var(&mut self, var: &Var) -> T;
     fn visit_while(&mut self, while_ctx: &While) -> T;
     fn visit_function(&mut self, function: &Rc<Function>) -> T;
+    fn visit_return(&mut self, expr: &expr::Expr) -> T;
 }
 
 impl Stmt {
@@ -85,6 +87,7 @@ impl Stmt {
             Stmt::Var(var) => visitor.visit_var(var),
             Stmt::While(while_ctx) => visitor.visit_while(while_ctx),
             Stmt::Function(function) => visitor.visit_function(function),
+            Stmt::Return(expr) => visitor.visit_return(expr),
         }
     }
 }
@@ -132,4 +135,9 @@ pub fn new_function(name: String, parameters: Vec<String>, statements: Vec<Stmt>
         line
     }))
 }
+
+pub fn new_return(expr: expr::Expr) -> Stmt {
+    Stmt::Return(expr)
+}
+
 

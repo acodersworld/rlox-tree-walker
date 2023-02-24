@@ -17,12 +17,7 @@ impl Environment {
         self.values.get(name).cloned()
     }
 
-    pub fn set(&mut self, name: &str, value: EvalValue) -> bool {
-        if self.values.contains_key(name) {
-            return false
-        }
-
+    pub fn set(&mut self, name: &str, value: EvalValue) {
         self.values.insert(name.to_string(), value);
-        return true
     }
 }
