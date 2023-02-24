@@ -17,14 +17,17 @@ impl<'a> InterpreterContext<'a> {
     pub fn new(global_environment: &'a mut Environment) -> InterpreterContext<'a> {
         InterpreterContext {
             global_environment,
-            local_environment: None
+            local_environment: None,
         }
     }
 
-    pub fn new_with_local_env(global_environment: &'a mut Environment, local_environment: Environment) -> InterpreterContext<'a> {
+    pub fn new_with_local_env(
+        global_environment: &'a mut Environment,
+        local_environment: Environment,
+    ) -> InterpreterContext<'a> {
         InterpreterContext {
             global_environment,
-            local_environment: Some(local_environment)
+            local_environment: Some(local_environment),
         }
     }
     fn is_truthy(&self, eval_value: &EvalValue) -> bool {
@@ -51,7 +54,7 @@ impl<'a> InterpreterContext<'a> {
         for stmt in stmts {
             let result = self.execute(stmt)?;
             if result.is_some() {
-                return Ok(result)
+                return Ok(result);
             }
         }
         Ok(None)
@@ -87,12 +90,12 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
         if is_truthy {
             let result = self.execute(&if_ctx.true_branch)?;
             if result.is_some() {
-                return Ok(result)
+                return Ok(result);
             }
         } else if let Some(branch) = &if_ctx.else_branch {
             let result = self.execute(&branch)?;
             if result.is_some() {
-                return Ok(result)
+                return Ok(result);
             }
         }
 
@@ -108,8 +111,7 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
 
         if let Some(local_environment) = &mut self.local_environment {
             local_environment.set(&var.name, initializer.clone());
-        }
-        else {
+        } else {
             self.global_environment.set(&var.name, initializer.clone());
         }
         Ok(None)
@@ -124,7 +126,7 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
 
             let result = self.execute(&while_ctx.body)?;
             if result.is_some() {
-                return Ok(result)
+                return Ok(result);
             }
         }
         Ok(None)
@@ -132,16 +134,19 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
 
     fn visit_function(&mut self, function: &Rc<stmt::Function>) -> StmtResult {
         let lox_function = eval_value::LoxFunction {
-            declaration: function.clone()
+            declaration: function.clone(),
         };
-        
-        self.global_environment.set(&function.name, eval_value::EvalValue::Function(lox_function));
-        return Ok(None)
+
+        self.global_environment.set(
+            &function.name,
+            eval_value::EvalValue::Function(lox_function),
+        );
+        return Ok(None);
     }
 
     fn visit_return(&mut self, expr: &expr::Expr) -> StmtResult {
         let value = self.evaluate_expr(expr)?;
-        return Ok(Some(value))
+        return Ok(Some(value));
     }
 }
 
@@ -277,21 +282,20 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
         let is_target_in_local_env = {
             if let Some(local_environment) = &self.local_environment {
                 local_environment.get(&assignment.target).is_some()
-            }
-            else {
+            } else {
                 false
             }
         };
 
         if is_target_in_local_env {
-            self.local_environment.as_mut().unwrap()
+            self.local_environment
+                .as_mut()
+                .unwrap()
                 .set(&assignment.target, value.clone());
-        }
-        else if self.global_environment.get(&assignment.target).is_some() {
+        } else if self.global_environment.get(&assignment.target).is_some() {
             self.global_environment
                 .set(&assignment.target, value.clone());
-        }
-        else {
+        } else {
             return Err(format!(
                 "Undefined variable {} at line {}",
                 assignment.target, assignment.line
@@ -306,7 +310,12 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
         match callee {
             EvalValue::Function(f) => {
                 if f.declaration.arity() != call.arguments.len() as u32 {
-                    return Err(format!("Function expected {} but got {}, at line {}", f.declaration.arity(), call.arguments.len(), call.line))
+                    return Err(format!(
+                        "Function expected {} but got {}, at line {}",
+                        f.declaration.arity(),
+                        call.arguments.len(),
+                        call.line
+                    ));
                 }
 
                 let mut arguments = vec![];
@@ -314,16 +323,15 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
                     arguments.push(self.evaluate_expr(arg)?);
                 }
 
-                return Ok(f.call(&mut self.global_environment, &arguments)?)
-            },
-            _ => {
+                return Ok(f.call(&mut self.global_environment, &arguments)?);
             }
+            _ => {}
         }
 
-        return Ok(EvalValue::Nil)
+        return Ok(EvalValue::Nil);
     }
 
     fn visit_nil(&self) -> EvalResult {
-        return Ok(EvalValue::Nil)
+        return Ok(EvalValue::Nil);
     }
 }

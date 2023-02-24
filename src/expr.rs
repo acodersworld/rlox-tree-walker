@@ -24,7 +24,7 @@ pub struct Assignment {
 pub struct Call {
     pub callee: Box<Expr>,
     pub line: u32,
-    pub arguments: Vec<Box<Expr>>
+    pub arguments: Vec<Box<Expr>>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -110,5 +110,9 @@ pub fn new_assignment(target: &str, line: u32, expr: Expr) -> Expr {
 }
 
 pub fn new_call(callee: Expr, line: u32, arguments: Vec<Box<Expr>>) -> Expr {
-    Expr::Call(Call {callee: Box::new(callee), line, arguments})
+    Expr::Call(Call {
+        callee: Box::new(callee),
+        line,
+        arguments,
+    })
 }

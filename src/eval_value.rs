@@ -1,16 +1,20 @@
+use crate::environment::Environment;
+use crate::interpreter::InterpreterContext;
+use crate::stmt;
 use std::fmt;
 use std::rc::Rc;
-use crate::stmt;
-use crate::interpreter::InterpreterContext;
-use crate::environment::Environment;
 
 #[derive(Debug, Clone)]
 pub struct LoxFunction {
-    pub declaration: Rc<stmt::Function>
+    pub declaration: Rc<stmt::Function>,
 }
 
 impl LoxFunction {
-    pub fn call(&self, global_environment: &mut Environment, arguments: &Vec<EvalValue>) -> Result<EvalValue, String> {
+    pub fn call(
+        &self,
+        global_environment: &mut Environment,
+        arguments: &Vec<EvalValue>,
+    ) -> Result<EvalValue, String> {
         let mut environment = Environment::new();
 
         let parameters = &self.declaration.parameters;
@@ -18,14 +22,13 @@ impl LoxFunction {
             environment.set(arg.0, arg.1.clone());
         }
 
-        let mut local_interpreter = InterpreterContext::new_with_local_env(global_environment, environment);
+        let mut local_interpreter =
+            InterpreterContext::new_with_local_env(global_environment, environment);
         if let Some(result) = local_interpreter.execute_many(&self.declaration.statements)? {
-            return Ok(result)
+            return Ok(result);
+        } else {
+            return Ok(EvalValue::Nil);
         }
-        else {
-            return Ok(EvalValue::Nil)
-        }
-        
     }
 }
 

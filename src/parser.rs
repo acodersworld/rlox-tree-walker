@@ -115,12 +115,17 @@ impl<'a> Parser<'a> {
         let (name, line) = {
             let next_token = match self.iter.next() {
                 Some(t) => t,
-                None => return Err(vec!["Expected identifer after 'fun', found EOF".to_string()])
+                None => return Err(vec!["Expected identifer after 'fun', found EOF".to_string()]),
             };
 
             match &next_token.token_type {
                 TokenType::Identifier(identifier) => (identifier, next_token.line),
-                _ => return Err(vec![format!("Expected identifier after 'fun', found {}", next_token.to_string())])
+                _ => {
+                    return Err(vec![format!(
+                        "Expected identifier after 'fun', found {}",
+                        next_token.to_string()
+                    )])
+                }
             }
         };
 
@@ -133,12 +138,21 @@ impl<'a> Parser<'a> {
                 let parameter = {
                     let next_token = match self.iter.next() {
                         Some(t) => t,
-                        None => return Err(vec!["Expected identifer after 'fun', found EOF".to_string()])
+                        None => {
+                            return Err(vec![
+                                "Expected identifer after 'fun', found EOF".to_string()
+                            ])
+                        }
                     };
 
                     match &next_token.token_type {
                         TokenType::Identifier(identifier) => identifier.clone(),
-                        _ => return Err(vec![format!("Expected identifier after 'fun', found {}", next_token.to_string())])
+                        _ => {
+                            return Err(vec![format!(
+                                "Expected identifier after 'fun', found {}",
+                                next_token.to_string()
+                            )])
+                        }
                     }
                 };
 
@@ -148,17 +162,28 @@ impl<'a> Parser<'a> {
                 }
             }
 
-            self.consume_token(TokenType::RightParen, "Expected ')' after function parameters")?;
+            self.consume_token(
+                TokenType::RightParen,
+                "Expected ')' after function parameters",
+            )?;
         }
 
-        self.consume_token(TokenType::LeftBrace, "Expected '{' after function parameters")?;
+        self.consume_token(
+            TokenType::LeftBrace,
+            "Expected '{' after function parameters",
+        )?;
 
         let mut statements = vec![];
         while self.match_tokens(&[TokenType::RightBrace]).is_none() {
             statements.push(self.statement()?);
         }
 
-        Ok(stmt::new_function(name.clone(), parameters, statements, line))
+        Ok(stmt::new_function(
+            name.clone(),
+            parameters,
+            statements,
+            line,
+        ))
     }
 
     fn return_stmt(&mut self) -> StmtResult {
@@ -275,12 +300,7 @@ impl<'a> Parser<'a> {
         let while_stmt = stmt::new_while(condition, body);
         let final_stmt = match initializer {
             None => while_stmt,
-            Some(i) => {
-                stmt::new_block(vec![
-                    i,
-                    while_stmt
-                ])
-            }
+            Some(i) => stmt::new_block(vec![i, while_stmt]),
         };
 
         Ok(final_stmt)
@@ -411,7 +431,6 @@ impl<'a> Parser<'a> {
         if let Some(left_param) = self.match_tokens(&[TokenType::LeftParen]) {
             let mut args = vec![];
             if self.match_tokens(&[TokenType::RightParen]).is_none() {
-
                 loop {
                     args.push(Box::new(self.expression()?));
                     if self.match_tokens(&[TokenType::Comma]).is_none() {
@@ -419,13 +438,16 @@ impl<'a> Parser<'a> {
                     }
                 }
 
-                self.consume_token(TokenType::RightParen, "Expected ')' after function call arguments")?;
+                self.consume_token(
+                    TokenType::RightParen,
+                    "Expected ')' after function call arguments",
+                )?;
             }
 
-            return Ok(expr::new_call(expr, left_param.line, args))
+            return Ok(expr::new_call(expr, left_param.line, args));
         }
 
-        return Ok(expr)
+        return Ok(expr);
     }
 
     fn grouping(&mut self) -> ExprResult {
@@ -1021,9 +1043,11 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![stmt::new_expr(
-                expr::new_assignment("variable", 1, expr::Expr::Number(10.0))
-            )]
+            vec![stmt::new_expr(expr::new_assignment(
+                "variable",
+                1,
+                expr::Expr::Number(10.0)
+            ))]
         );
     }
 
@@ -1033,13 +1057,102 @@ mod test {
             parse(&vec![
                 Token::new(TokenType::While, 1),
                 Token::new(TokenType::LeftParen, 1),
-
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
                 Token::new(TokenType::Less, 1),
                 Token::new(TokenType::Number(10.0), 1),
-
                 Token::new(TokenType::RightParen, 1),
+                Token::new(TokenType::LeftBrace, 1),
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::RightBrace, 1),
+            ])
+            .unwrap(),
+            vec![stmt::new_while(
+                expr::new_binary(
+                    expr::new_variable("counter", 1),
+                    Token::new(TokenType::Less, 1),
+                    expr::Expr::Number(10.0)
+                ),
+                stmt::new_block(vec![stmt::new_print(vec![expr::new_variable(
+                    "counter", 1
+                )])])
+            )]
+        );
+    }
 
+    #[test]
+    fn test_for() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::For, 1),
+                Token::new(TokenType::LeftParen, 1),
+                Token::new(TokenType::Var, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::Equal, 1),
+                Token::new(TokenType::Number(0.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::Less, 1),
+                Token::new(TokenType::Number(10.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::Equal, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::Plus, 1),
+                Token::new(TokenType::Number(1.0), 1),
+                Token::new(TokenType::RightParen, 1),
+                Token::new(TokenType::LeftBrace, 1),
+                Token::new(TokenType::Print, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::RightBrace, 1),
+            ])
+            .unwrap(),
+            vec![stmt::new_block(vec![
+                stmt::new_var("counter", 1, expr::Expr::Number(0.0)),
+                stmt::new_while(
+                    expr::new_binary(
+                        expr::new_variable("counter", 1),
+                        Token::new(TokenType::Less, 1),
+                        expr::Expr::Number(10.0)
+                    ),
+                    stmt::new_block(vec![
+                        stmt::new_block(vec![stmt::new_print(vec![expr::new_variable(
+                            "counter", 1
+                        )])]),
+                        stmt::new_expr(expr::new_assignment(
+                            "counter",
+                            1,
+                            expr::new_binary(
+                                expr::new_variable("counter", 1),
+                                Token::new(TokenType::Plus, 1),
+                                expr::Expr::Number(1.0)
+                            )
+                        ))
+                    ])
+                )
+            ])]
+        );
+    }
+
+    #[test]
+    fn test_for_1() {
+        assert_eq!(
+            parse(&vec![
+                Token::new(TokenType::For, 1),
+                Token::new(TokenType::LeftParen, 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::Less, 1),
+                Token::new(TokenType::Number(10.0), 1),
+                Token::new(TokenType::SemiColon, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::Equal, 1),
+                Token::new(TokenType::Identifier("counter".to_owned()), 1),
+                Token::new(TokenType::Plus, 1),
+                Token::new(TokenType::Number(1.0), 1),
+                Token::new(TokenType::RightParen, 1),
                 Token::new(TokenType::LeftBrace, 1),
                 Token::new(TokenType::Print, 1),
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
@@ -1054,134 +1167,20 @@ mod test {
                     expr::Expr::Number(10.0)
                 ),
                 stmt::new_block(vec![
-                    stmt::new_print(vec![
-                        expr::new_variable("counter", 1)
-                    ])
-                ])
-            )]
-
-        );
-    }
-
-    #[test]
-    fn test_for() {
-        assert_eq!(
-            parse(&vec![
-                Token::new(TokenType::For, 1),
-                Token::new(TokenType::LeftParen, 1),
-
-                Token::new(TokenType::Var, 1),
-                Token::new(TokenType::Identifier("counter".to_owned()), 1),
-                Token::new(TokenType::Equal, 1),
-                Token::new(TokenType::Number(0.0), 1),
-                Token::new(TokenType::SemiColon, 1),
-
-
-                Token::new(TokenType::Identifier("counter".to_owned()), 1),
-                Token::new(TokenType::Less, 1),
-                Token::new(TokenType::Number(10.0), 1),
-                Token::new(TokenType::SemiColon, 1),
-
-                Token::new(TokenType::Identifier("counter".to_owned()), 1),
-                Token::new(TokenType::Equal, 1),
-                Token::new(TokenType::Identifier("counter".to_owned()), 1),
-                Token::new(TokenType::Plus, 1),
-                Token::new(TokenType::Number(1.0), 1),
-
-                Token::new(TokenType::RightParen, 1),
-
-                Token::new(TokenType::LeftBrace, 1),
-                Token::new(TokenType::Print, 1),
-                Token::new(TokenType::Identifier("counter".to_owned()), 1),
-                Token::new(TokenType::SemiColon, 1),
-                Token::new(TokenType::RightBrace, 1),
-            ])
-            .unwrap(),
-            vec![
-                stmt::new_block(vec![
-                    stmt::new_var("counter", 1, expr::Expr::Number(0.0)),
-                    stmt::new_while(
+                    stmt::new_block(vec![stmt::new_print(vec![expr::new_variable(
+                        "counter", 1
+                    )])]),
+                    stmt::new_expr(expr::new_assignment(
+                        "counter",
+                        1,
                         expr::new_binary(
                             expr::new_variable("counter", 1),
-                            Token::new(TokenType::Less, 1),
-                            expr::Expr::Number(10.0)
-                        ),
-                        stmt::new_block(vec![
-                            stmt::new_block(vec![
-                                stmt::new_print(vec![
-                                    expr::new_variable("counter", 1)
-                                ])
-                            ]),
-                            stmt::new_expr(
-                                expr::new_assignment("counter", 1,
-                                    expr::new_binary(
-                                        expr::new_variable("counter", 1), 
-                                        Token::new(TokenType::Plus, 1),
-                                        expr::Expr::Number(1.0)
-                                    )
-                                )
-                            )
-                        ])
-                    )
-                ])
-            ]
-        );
-    }
-
-    #[test]
-    fn test_for_1() {
-        assert_eq!(
-            parse(&vec![
-                Token::new(TokenType::For, 1),
-                Token::new(TokenType::LeftParen, 1),
-
-                Token::new(TokenType::SemiColon, 1),
-
-                Token::new(TokenType::Identifier("counter".to_owned()), 1),
-                Token::new(TokenType::Less, 1),
-                Token::new(TokenType::Number(10.0), 1),
-                Token::new(TokenType::SemiColon, 1),
-
-                Token::new(TokenType::Identifier("counter".to_owned()), 1),
-                Token::new(TokenType::Equal, 1),
-                Token::new(TokenType::Identifier("counter".to_owned()), 1),
-                Token::new(TokenType::Plus, 1),
-                Token::new(TokenType::Number(1.0), 1),
-
-                Token::new(TokenType::RightParen, 1),
-
-                Token::new(TokenType::LeftBrace, 1),
-                Token::new(TokenType::Print, 1),
-                Token::new(TokenType::Identifier("counter".to_owned()), 1),
-                Token::new(TokenType::SemiColon, 1),
-                Token::new(TokenType::RightBrace, 1),
-            ])
-            .unwrap(),
-            vec![
-                stmt::new_while(
-                    expr::new_binary(
-                        expr::new_variable("counter", 1),
-                        Token::new(TokenType::Less, 1),
-                        expr::Expr::Number(10.0)
-                    ),
-                    stmt::new_block(vec![
-                        stmt::new_block(vec![
-                            stmt::new_print(vec![
-                                expr::new_variable("counter", 1)
-                            ])
-                        ]),
-                        stmt::new_expr(
-                            expr::new_assignment("counter", 1,
-                                expr::new_binary(
-                                    expr::new_variable("counter", 1), 
-                                    Token::new(TokenType::Plus, 1),
-                                    expr::Expr::Number(1.0)
-                                )
-                            )
+                            Token::new(TokenType::Plus, 1),
+                            expr::Expr::Number(1.0)
                         )
-                    ])
-                )
-            ]
+                    ))
+                ])
+            )]
         );
     }
 
@@ -1191,23 +1190,18 @@ mod test {
             parse(&vec![
                 Token::new(TokenType::For, 1),
                 Token::new(TokenType::LeftParen, 1),
-
                 Token::new(TokenType::Var, 1),
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
                 Token::new(TokenType::Equal, 1),
                 Token::new(TokenType::Number(0.0), 1),
                 Token::new(TokenType::SemiColon, 1),
-
                 Token::new(TokenType::SemiColon, 1),
-
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
                 Token::new(TokenType::Equal, 1),
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
                 Token::new(TokenType::Plus, 1),
                 Token::new(TokenType::Number(1.0), 1),
-
                 Token::new(TokenType::RightParen, 1),
-
                 Token::new(TokenType::LeftBrace, 1),
                 Token::new(TokenType::Print, 1),
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
@@ -1215,30 +1209,26 @@ mod test {
                 Token::new(TokenType::RightBrace, 1),
             ])
             .unwrap(),
-            vec![
-                stmt::new_block(vec![
-                    stmt::new_var("counter", 1, expr::Expr::Number(0.0)),
-                    stmt::new_while(
-                        expr::Expr::Bool(true),
-                        stmt::new_block(vec![
-                            stmt::new_block(vec![
-                                stmt::new_print(vec![
-                                    expr::new_variable("counter", 1)
-                                ])
-                            ]),
-                            stmt::new_expr(
-                                expr::new_assignment("counter", 1,
-                                    expr::new_binary(
-                                        expr::new_variable("counter", 1), 
-                                        Token::new(TokenType::Plus, 1),
-                                        expr::Expr::Number(1.0)
-                                    )
-                                )
+            vec![stmt::new_block(vec![
+                stmt::new_var("counter", 1, expr::Expr::Number(0.0)),
+                stmt::new_while(
+                    expr::Expr::Bool(true),
+                    stmt::new_block(vec![
+                        stmt::new_block(vec![stmt::new_print(vec![expr::new_variable(
+                            "counter", 1
+                        )])]),
+                        stmt::new_expr(expr::new_assignment(
+                            "counter",
+                            1,
+                            expr::new_binary(
+                                expr::new_variable("counter", 1),
+                                Token::new(TokenType::Plus, 1),
+                                expr::Expr::Number(1.0)
                             )
-                        ])
-                    )
-                ])
-            ]
+                        ))
+                    ])
+                )
+            ])]
         );
     }
 
@@ -1248,21 +1238,16 @@ mod test {
             parse(&vec![
                 Token::new(TokenType::For, 1),
                 Token::new(TokenType::LeftParen, 1),
-
                 Token::new(TokenType::Var, 1),
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
                 Token::new(TokenType::Equal, 1),
                 Token::new(TokenType::Number(0.0), 1),
                 Token::new(TokenType::SemiColon, 1),
-
-
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
                 Token::new(TokenType::Less, 1),
                 Token::new(TokenType::Number(10.0), 1),
                 Token::new(TokenType::SemiColon, 1),
-
                 Token::new(TokenType::RightParen, 1),
-
                 Token::new(TokenType::LeftBrace, 1),
                 Token::new(TokenType::Print, 1),
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
@@ -1270,23 +1255,19 @@ mod test {
                 Token::new(TokenType::RightBrace, 1),
             ])
             .unwrap(),
-            vec![
-                stmt::new_block(vec![
-                    stmt::new_var("counter", 1, expr::Expr::Number(0.0)),
-                    stmt::new_while(
-                        expr::new_binary(
-                            expr::new_variable("counter", 1),
-                            Token::new(TokenType::Less, 1),
-                            expr::Expr::Number(10.0)
-                        ),
-                        stmt::new_block(vec![
-                            stmt::new_print(vec![
-                                expr::new_variable("counter", 1)
-                            ])
-                        ])
-                    )
-                ])
-            ]
+            vec![stmt::new_block(vec![
+                stmt::new_var("counter", 1, expr::Expr::Number(0.0)),
+                stmt::new_while(
+                    expr::new_binary(
+                        expr::new_variable("counter", 1),
+                        Token::new(TokenType::Less, 1),
+                        expr::Expr::Number(10.0)
+                    ),
+                    stmt::new_block(vec![stmt::new_print(vec![expr::new_variable(
+                        "counter", 1
+                    )])])
+                )
+            ])]
         );
     }
 
@@ -1296,11 +1277,9 @@ mod test {
             parse(&vec![
                 Token::new(TokenType::For, 1),
                 Token::new(TokenType::LeftParen, 1),
-
                 Token::new(TokenType::SemiColon, 1),
                 Token::new(TokenType::SemiColon, 1),
                 Token::new(TokenType::RightParen, 1),
-
                 Token::new(TokenType::LeftBrace, 1),
                 Token::new(TokenType::Print, 1),
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
@@ -1308,16 +1287,12 @@ mod test {
                 Token::new(TokenType::RightBrace, 1),
             ])
             .unwrap(),
-            vec![
-                stmt::new_while(
-                    expr::Expr::Bool(true),
-                    stmt::new_block(vec![
-                        stmt::new_print(vec![
-                            expr::new_variable("counter", 1)
-                        ])
-                    ])
-                )
-            ]
+            vec![stmt::new_while(
+                expr::Expr::Bool(true),
+                stmt::new_block(vec![stmt::new_print(vec![expr::new_variable(
+                    "counter", 1
+                )])])
+            )]
         );
     }
 
@@ -1336,19 +1311,15 @@ mod test {
                 Token::new(TokenType::SemiColon, 1),
             ])
             .unwrap(),
-            vec![
-                stmt::new_expr(
-                    expr::new_call(
-                        expr::new_variable("MyFunction", 1),
-                        1,
-                        vec![
-                            Box::new(expr::Expr::Number(10.0)),
-                            Box::new(expr::Expr::Str("Arg".to_owned())),
-                            Box::new(expr::Expr::Bool(true))
-                        ]
-                    )
-                )
-            ]
+            vec![stmt::new_expr(expr::new_call(
+                expr::new_variable("MyFunction", 1),
+                1,
+                vec![
+                    Box::new(expr::Expr::Number(10.0)),
+                    Box::new(expr::Expr::Str("Arg".to_owned())),
+                    Box::new(expr::Expr::Bool(true))
+                ]
+            ))]
         );
     }
 
@@ -1365,7 +1336,6 @@ mod test {
                 Token::new(TokenType::Comma, 1),
                 Token::new(TokenType::Identifier("Third".to_owned()), 1),
                 Token::new(TokenType::RightParen, 1),
-
                 Token::new(TokenType::LeftBrace, 1),
                 Token::new(TokenType::Print, 1),
                 Token::new(TokenType::Identifier("counter".to_owned()), 1),
@@ -1373,22 +1343,12 @@ mod test {
                 Token::new(TokenType::RightBrace, 1),
             ])
             .unwrap(),
-            vec![
-                stmt::new_function(
-                    "MyFunction".to_owned(),
-                    vec![
-                        "First".to_owned(),
-                        "Second".to_owned(),
-                        "Third".to_owned()
-                    ],
-                    vec![
-                        stmt::new_print(vec![
-                            expr::new_variable("counter", 1)
-                        ])
-                    ],
-                    1
-                ),
-            ]
+            vec![stmt::new_function(
+                "MyFunction".to_owned(),
+                vec!["First".to_owned(), "Second".to_owned(), "Third".to_owned()],
+                vec![stmt::new_print(vec![expr::new_variable("counter", 1)])],
+                1
+            ),]
         );
     }
 }

@@ -1,7 +1,7 @@
 use std::io::Read;
 
-use crate::interpreter::InterpreterContext;
 use crate::environment::Environment;
+use crate::interpreter::InterpreterContext;
 use crate::parser;
 use crate::scanner;
 

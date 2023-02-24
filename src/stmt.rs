@@ -1,6 +1,6 @@
 use crate::expr;
-use std::vec::Vec;
 use std::rc::Rc;
+use std::vec::Vec;
 
 #[derive(Debug, PartialEq)]
 pub struct Block {
@@ -29,7 +29,7 @@ pub struct Var {
 #[derive(Debug, PartialEq)]
 pub struct While {
     pub condition: expr::Expr,
-    pub body: Box<Stmt>
+    pub body: Box<Stmt>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -37,7 +37,7 @@ pub struct For {
     pub initializer: Option<Box<Stmt>>,
     pub condition: Option<expr::Expr>,
     pub loop_eval: Option<expr::Expr>,
-    pub body: Box<Stmt>
+    pub body: Box<Stmt>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -45,7 +45,7 @@ pub struct Function {
     pub name: String,
     pub parameters: Vec<String>,
     pub statements: Vec<Stmt>,
-    pub line: u32
+    pub line: u32,
 }
 
 impl Function {
@@ -116,28 +116,31 @@ pub fn new_var(name: &str, line: u32, initializer: expr::Expr) -> Stmt {
     Stmt::Var(Var {
         name: name.to_string(),
         line,
-        initializer
+        initializer,
     })
 }
 
 pub fn new_while(condition: expr::Expr, body: Stmt) -> Stmt {
-    Stmt::While(While{
+    Stmt::While(While {
         condition,
-        body: Box::new(body)
+        body: Box::new(body),
     })
 }
 
-pub fn new_function(name: String, parameters: Vec<String>, statements: Vec<Stmt>, line: u32) -> Stmt {
-    Stmt::Function(Rc::new(Function{
+pub fn new_function(
+    name: String,
+    parameters: Vec<String>,
+    statements: Vec<Stmt>,
+    line: u32,
+) -> Stmt {
+    Stmt::Function(Rc::new(Function {
         name,
         parameters,
         statements,
-        line
+        line,
     }))
 }
 
 pub fn new_return(expr: expr::Expr) -> Stmt {
     Stmt::Return(expr)
 }
-
-
