@@ -7,7 +7,7 @@ use std::rc::Rc;
 #[derive(Debug)]
 pub struct LoxFunction {
     pub declaration: Rc<stmt::Function>,
-    pub closure: Option<Environment>
+    pub closure: Option<Environment>,
 }
 
 impl LoxFunction {
@@ -19,13 +19,13 @@ impl LoxFunction {
         let mut environment = {
             match &self.closure {
                 None => Environment::new(),
-                Some(closure) => Environment::new_capture_env(&closure)
+                Some(closure) => Environment::new_capture_env(&closure),
             }
         };
 
         let parameters = &self.declaration.parameters;
         for arg in parameters.iter().zip(arguments.iter()) {
-            environment.set(arg.0, arg.1.clone());
+            environment.set_var(arg.0, arg.1.clone());
         }
 
         let mut local_interpreter =

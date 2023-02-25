@@ -103,16 +103,29 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
     }
 
     fn visit_block(&mut self, block: &stmt::Block) -> StmtResult {
-        self.execute_many(&block.statements)
+        if self.local_environment.is_some() {
+            self.local_environment.as_mut().unwrap().push_scope();
+            let result = self.execute_many(&block.statements);
+            self.local_environment.as_mut().unwrap().pop_scope();
+
+            return result;
+        } else {
+            let local_env = Environment::new();
+            let mut local_scope =
+                InterpreterContext::new_with_local_env(self.global_environment, local_env);
+
+            return local_scope.execute_many(&block.statements);
+        }
     }
 
     fn visit_var(&mut self, var: &stmt::Var) -> StmtResult {
         let initializer = self.evaluate_expr(&var.initializer)?;
 
         if let Some(local_environment) = &mut self.local_environment {
-            local_environment.set(&var.name, initializer.clone());
+            local_environment.define_var(&var.name, initializer.clone());
         } else {
-            self.global_environment.set(&var.name, initializer.clone());
+            self.global_environment
+                .define_var(&var.name, initializer.clone());
         }
         Ok(None)
     }
@@ -135,10 +148,10 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
     fn visit_function(&mut self, function: &Rc<stmt::Function>) -> StmtResult {
         let lox_function = eval_value::LoxFunction {
             declaration: function.clone(),
-            closure: self.local_environment.clone()
+            closure: self.local_environment.clone(),
         };
 
-        self.global_environment.set(
+        self.global_environment.set_var(
             &function.name,
             eval_value::EvalValue::Function(Rc::new(lox_function)),
         );
@@ -233,7 +246,9 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
             }
             TokenType::Plus => match (&left, &right) {
                 (EvalValue::Number(l), EvalValue::Number(r)) => Ok(EvalValue::Number(l + r)),
-                (EvalValue::Str(l), EvalValue::Str(r)) => Ok(EvalValue::Str(Rc::new(l.to_string() + r.as_ref()))),
+                (EvalValue::Str(l), EvalValue::Str(r)) => {
+                    Ok(EvalValue::Str(Rc::new(l.to_string() + r.as_ref())))
+                }
                 _ => Err("Must be numbers or string".to_owned()),
             },
             _ => Err("Unsupported binary operator".to_owned()),
@@ -259,12 +274,12 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
 
     fn visit_variable(&mut self, variable: &expr::Variable) -> EvalResult {
         if let Some(local_environment) = &self.local_environment {
-            if let Some(value) = local_environment.get(&variable.name) {
+            if let Some(value) = local_environment.get_var(&variable.name) {
                 return Ok(value);
             }
         }
 
-        let value = match self.global_environment.get(&variable.name) {
+        let value = match self.global_environment.get_var(&variable.name) {
             Some(v) => v,
             None => {
                 return Err(format!(
@@ -282,7 +297,7 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
 
         let is_target_in_local_env = {
             if let Some(local_environment) = &self.local_environment {
-                local_environment.get(&assignment.target).is_some()
+                local_environment.get_var(&assignment.target).is_some()
             } else {
                 false
             }
@@ -292,10 +307,14 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
             self.local_environment
                 .as_mut()
                 .unwrap()
-                .set(&assignment.target, value.clone());
-        } else if self.global_environment.get(&assignment.target).is_some() {
+                .set_var(&assignment.target, value.clone());
+        } else if self
+            .global_environment
+            .get_var(&assignment.target)
+            .is_some()
+        {
             self.global_environment
-                .set(&assignment.target, value.clone());
+                .set_var(&assignment.target, value.clone());
         } else {
             return Err(format!(
                 "Undefined variable {} at line {}",
