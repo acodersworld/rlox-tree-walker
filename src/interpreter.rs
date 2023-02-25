@@ -135,11 +135,12 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
     fn visit_function(&mut self, function: &Rc<stmt::Function>) -> StmtResult {
         let lox_function = eval_value::LoxFunction {
             declaration: function.clone(),
+            closure: self.local_environment.clone()
         };
 
         self.global_environment.set(
             &function.name,
-            eval_value::EvalValue::Function(lox_function),
+            eval_value::EvalValue::Function(Rc::new(lox_function)),
         );
         return Ok(None);
     }
@@ -156,7 +157,7 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
     }
 
     fn visit_literal_str(&self, literal_str: &str) -> EvalResult {
-        return Ok(EvalValue::Str(literal_str.to_string()));
+        return Ok(EvalValue::Str(Rc::new(literal_str.to_string())));
     }
 
     fn visit_literal_number(&self, literal_number: &f32) -> EvalResult {
@@ -232,7 +233,7 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
             }
             TokenType::Plus => match (&left, &right) {
                 (EvalValue::Number(l), EvalValue::Number(r)) => Ok(EvalValue::Number(l + r)),
-                (EvalValue::Str(l), EvalValue::Str(r)) => Ok(EvalValue::Str(l.to_owned() + r)),
+                (EvalValue::Str(l), EvalValue::Str(r)) => Ok(EvalValue::Str(Rc::new(l.to_string() + r.as_ref()))),
                 _ => Err("Must be numbers or string".to_owned()),
             },
             _ => Err("Unsupported binary operator".to_owned()),
@@ -328,7 +329,7 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
             _ => {}
         }
 
-        return Ok(EvalValue::Nil);
+        Err(format!("Not a callable object at line {}", call.line))
     }
 
     fn visit_nil(&self) -> EvalResult {

@@ -4,9 +4,10 @@ use crate::stmt;
 use std::fmt;
 use std::rc::Rc;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct LoxFunction {
     pub declaration: Rc<stmt::Function>,
+    pub closure: Option<Environment>
 }
 
 impl LoxFunction {
@@ -15,7 +16,12 @@ impl LoxFunction {
         global_environment: &mut Environment,
         arguments: &Vec<EvalValue>,
     ) -> Result<EvalValue, String> {
-        let mut environment = Environment::new();
+        let mut environment = {
+            match &self.closure {
+                None => Environment::new(),
+                Some(closure) => Environment::new_capture_env(&closure)
+            }
+        };
 
         let parameters = &self.declaration.parameters;
         for arg in parameters.iter().zip(arguments.iter()) {
@@ -35,9 +41,9 @@ impl LoxFunction {
 #[derive(Debug, Clone)]
 pub enum EvalValue {
     Number(f32),
-    Str(String),
+    Str(Rc<String>),
     Bool(bool),
-    Function(LoxFunction),
+    Function(Rc<LoxFunction>),
     Nil,
 }
 
