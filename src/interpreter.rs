@@ -151,10 +151,17 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
             closure: self.local_environment.clone(),
         };
 
-        self.global_environment.set_var(
-            &function.name,
-            eval_value::EvalValue::Function(Rc::new(lox_function)),
-        );
+        if let Some(local_environment) = &mut self.local_environment {
+            local_environment.set_var(
+                &function.name,
+                eval_value::EvalValue::Function(Rc::new(lox_function)),
+            );
+        } else {
+            self.global_environment.set_var(
+                &function.name,
+                eval_value::EvalValue::Function(Rc::new(lox_function)),
+            );
+        }
         return Ok(None);
     }
 
@@ -343,7 +350,7 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
                     arguments.push(self.evaluate_expr(arg)?);
                 }
 
-                return Ok(f.call(&mut self.global_environment, &arguments)?);
+                return Ok(eval_value::LoxFunction::call(f, &mut self.global_environment, &arguments)?);
             }
             _ => {}
         }

@@ -12,25 +12,28 @@ pub struct LoxFunction {
 
 impl LoxFunction {
     pub fn call(
-        &self,
+        lox_function: Rc<LoxFunction>,
         global_environment: &mut Environment,
         arguments: &Vec<EvalValue>,
     ) -> Result<EvalValue, String> {
         let mut environment = {
-            match &self.closure {
+            match &lox_function.closure {
                 None => Environment::new(),
                 Some(closure) => Environment::new_capture_env(&closure),
             }
         };
 
-        let parameters = &self.declaration.parameters;
+        // allow recursion
+        environment.set_var(&lox_function.declaration.name, EvalValue::Function(lox_function.clone()));
+
+        let parameters = &lox_function.declaration.parameters;
         for arg in parameters.iter().zip(arguments.iter()) {
             environment.set_var(arg.0, arg.1.clone());
         }
 
         let mut local_interpreter =
             InterpreterContext::new_with_local_env(global_environment, environment);
-        if let Some(result) = local_interpreter.execute_many(&self.declaration.statements)? {
+        if let Some(result) = local_interpreter.execute_many(&lox_function.declaration.statements)? {
             return Ok(result);
         } else {
             return Ok(EvalValue::Nil);
