@@ -2,6 +2,7 @@ use std::io::Read;
 
 use crate::environment::Environment;
 use crate::interpreter::InterpreterContext;
+use crate::resolver::Resolver;
 use crate::parser;
 use crate::scanner;
 
@@ -18,6 +19,11 @@ pub fn lox_main(args: &[String]) {
 fn run(interpreter: &mut InterpreterContext, source: &str) -> Result<(), std::vec::Vec<String>> {
     let tokens = scanner::scan(source)?;
     let stmts = parser::parse(&tokens)?;
+
+    let mut resolver = Resolver::new();
+    if let Err(e) = resolver.resolve(&stmts) {
+        return Err(vec![e]);
+    }
 
     if let Err(e) = interpreter.interpret(&stmts) {
         return Err(vec![e]);

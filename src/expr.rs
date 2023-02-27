@@ -1,4 +1,5 @@
 use crate::token;
+use std::cell::Cell;
 
 #[derive(Debug, PartialEq)]
 pub struct Binary {
@@ -11,6 +12,7 @@ pub struct Binary {
 pub struct Variable {
     pub name: String,
     pub line: u32,
+    pub stack_idx: Cell<Option<usize>>
 }
 
 #[derive(Debug, PartialEq)]
@@ -18,6 +20,7 @@ pub struct Assignment {
     pub target: String,
     pub line: u32,
     pub expr: Box<Expr>,
+    pub stack_idx: Cell<Option<usize>>
 }
 
 #[derive(Debug, PartialEq)]
@@ -98,6 +101,7 @@ pub fn new_variable(name: &str, line: u32) -> Expr {
     Expr::Variable(Variable {
         name: name.to_string(),
         line,
+        stack_idx: Cell::new(None)
     })
 }
 
@@ -106,6 +110,7 @@ pub fn new_assignment(target: &str, line: u32, expr: Expr) -> Expr {
         target: target.to_string(),
         line,
         expr: Box::new(expr),
+        stack_idx: Cell::new(None)
     })
 }
 

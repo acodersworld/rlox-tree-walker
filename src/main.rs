@@ -2,6 +2,7 @@ mod environment;
 mod eval_value;
 mod expr;
 mod interpreter;
+mod resolver;
 mod lox;
 mod parser;
 mod scanner;

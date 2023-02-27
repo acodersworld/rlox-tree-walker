@@ -48,6 +48,26 @@ impl Environment {
         });
     }
 
+    pub fn get_var_idx(&self, name: &str) -> Option<usize> {
+        let name_hash = Environment::hash_name(name);
+
+        for (idx, stack_value) in self.values.iter().enumerate().rev() {
+            if stack_value.hash == name_hash {
+                return Some(idx);
+            }
+        }
+
+        None
+    }
+
+    pub fn get_var_by_idx(&self, idx: usize) -> EvalValue {
+        self.values[idx].value.borrow().clone()
+    }
+
+    pub fn set_var_by_idx(&self, idx: usize, value: EvalValue) {
+        *self.values[idx].value.borrow_mut() = value;
+    }
+
     pub fn get_var(&self, name: &str) -> Option<EvalValue> {
         self.find_eval_value(name, 0)
             .map(|ref_mut_value| ref_mut_value.clone())

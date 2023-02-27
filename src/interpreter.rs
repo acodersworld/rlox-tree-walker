@@ -146,15 +146,22 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
     }
 
     fn visit_function(&mut self, function: &Rc<stmt::Function>) -> StmtResult {
-        let lox_function = eval_value::LoxFunction {
+        let lox_function = Rc::new(eval_value::LoxFunction {
             declaration: function.clone(),
             closure: self.local_environment.clone(),
-        };
+        });
 
-        self.global_environment.set_var(
-            &function.name,
-            eval_value::EvalValue::Function(Rc::new(lox_function)),
-        );
+        if let Some(local_environment) = &mut self.local_environment {
+            local_environment.set_var(
+                &function.name,
+                eval_value::EvalValue::Function(lox_function),
+            );
+        } else {
+            self.global_environment.set_var(
+                &function.name,
+                eval_value::EvalValue::Function(lox_function),
+            );
+        }
         return Ok(None);
     }
 
@@ -274,9 +281,8 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
 
     fn visit_variable(&mut self, variable: &expr::Variable) -> EvalResult {
         if let Some(local_environment) = &self.local_environment {
-            if let Some(value) = local_environment.get_var(&variable.name) {
-                return Ok(value);
-            }
+            let idx = variable.stack_idx.get().unwrap();
+            return Ok(local_environment.get_var_by_idx(idx));
         }
 
         let value = match self.global_environment.get_var(&variable.name) {
@@ -295,19 +301,11 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
     fn visit_assignment(&mut self, assignment: &expr::Assignment) -> EvalResult {
         let value = self.evaluate_expr(&assignment.expr)?;
 
-        let is_target_in_local_env = {
-            if let Some(local_environment) = &self.local_environment {
-                local_environment.get_var(&assignment.target).is_some()
-            } else {
-                false
-            }
-        };
-
-        if is_target_in_local_env {
+        if let Some(idx) = assignment.stack_idx.get() {
             self.local_environment
                 .as_mut()
                 .unwrap()
-                .set_var(&assignment.target, value.clone());
+                .set_var_by_idx(idx, value.clone());
         } else if self
             .global_environment
             .get_var(&assignment.target)
