@@ -119,7 +119,10 @@ impl stmt::StmtVisitor<StmtResult> for InterpreterContext<'_> {
     }
 
     fn visit_var(&mut self, var: &stmt::Var) -> StmtResult {
-        let initializer = self.evaluate_expr(&var.initializer)?;
+        let initializer = match &var.initializer {
+            Some(initializer) => self.evaluate_expr(initializer)?,
+            None => EvalValue::Nil
+        };
 
         if let Some(local_environment) = &mut self.local_environment {
             local_environment.define_var(&var.name, initializer.clone());
@@ -191,7 +194,7 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
         let get_numbers = || -> Result<(f32, f32), String> {
             match (&left, &right) {
                 (EvalValue::Number(l), EvalValue::Number(r)) => Ok((*l, *r)),
-                _ => Err("Must be numbers".to_owned()),
+                _ => Err(format!("Must be numbers at line {}", binary.operator.line)),
             }
         };
 
@@ -213,9 +216,11 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
                 Ok(EvalValue::Bool(l >= r))
             }
 
-            TokenType::EqualEqual => {
-                let (l, r) = get_numbers()?;
-                Ok(EvalValue::Bool(l == r))
+            TokenType::EqualEqual  => match (&left, &right) {
+                (EvalValue::Bool(l), EvalValue::Bool(r)) => Ok(EvalValue::Bool(l == r)),
+                (EvalValue::Number(l), EvalValue::Number(r)) => Ok(EvalValue::Bool(l == r)),
+                (EvalValue::Str(l), EvalValue::Str(r)) => Ok(EvalValue::Bool(l == r)),
+                _ => Err(format!("Must be numbers, string or bool at line {}", binary.operator.line)),
             }
             TokenType::BangEqual => {
                 let (l, r) = get_numbers()?;
@@ -256,9 +261,9 @@ impl expr::ExprVisitor<EvalResult> for InterpreterContext<'_> {
                 (EvalValue::Str(l), EvalValue::Str(r)) => {
                     Ok(EvalValue::Str(Rc::new(l.to_string() + r.as_ref())))
                 }
-                _ => Err("Must be numbers or string".to_owned()),
+                _ => Err(format!("Must be numbers or string at line {}", binary.operator.line)),
             },
-            _ => Err("Unsupported binary operator".to_owned()),
+            _ => Err(format!("Unsupported binary operator at line{}", binary.operator.line)),
         }
     }
 

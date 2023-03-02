@@ -250,13 +250,16 @@ impl<'a> Parser<'a> {
             }
         };
 
-        self.consume_token(TokenType::Equal, "Expected '=' after var identifier")?;
-
-        let expr = self.expression()?;
+        let initializer = if self.match_tokens(&[TokenType::Equal]).is_some() {
+            Some(self.expression()?)
+        }
+        else {
+            None
+        };
 
         self.consume_token(TokenType::SemiColon, "Expected ';' after print statement")?;
 
-        Ok(stmt::new_var(identifier_name, line, expr))
+        Ok(stmt::new_var(identifier_name, line, initializer))
     }
 
     fn while_stmt(&mut self) -> StmtResult {

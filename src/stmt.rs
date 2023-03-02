@@ -23,7 +23,7 @@ pub struct Print {
 pub struct Var {
     pub name: String,
     pub line: u32,
-    pub initializer: expr::Expr,
+    pub initializer: Option<expr::Expr>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -112,7 +112,7 @@ pub fn new_block(statements: Vec<Stmt>) -> Stmt {
     Stmt::Block(Block { statements })
 }
 
-pub fn new_var(name: &str, line: u32, initializer: expr::Expr) -> Stmt {
+pub fn new_var(name: &str, line: u32, initializer: Option<expr::Expr>) -> Stmt {
     Stmt::Var(Var {
         name: name.to_string(),
         line,
